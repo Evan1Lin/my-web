@@ -303,21 +303,36 @@ export async function startServer(portOverride?: number): Promise<number> {
         return res.status(400).json({ success: false, error: "请上传 Excel 文件" });
       }
 
-      const wb = XLSX.read(req.file.buffer, { type: "buffer" });
+      const wb = XLSX.read(req.file.buffer, { type: "buffer", cellDates: true });
       const wsname = wb.SheetNames[0];
       const ws = wb.Sheets[wsname];
       const rawData: any[] = XLSX.utils.sheet_to_json(ws);
 
       const processedData = rawData.map((row) => {
+        const formatLongDate = (y: number, m: number, d: number) => `${y}年${m}月${d}日`;
+
         const normalizeDateText = (value: any) => {
           if (!value) return "";
-          if (value instanceof Date) return value.toISOString().slice(0, 10);
-          return String(value).trim();
+          if (value instanceof Date) return formatLongDate(value.getFullYear(), value.getMonth() + 1, value.getDate());
+          if (typeof value === "number") {
+            const parsed = XLSX.SSF.parse_date_code(value);
+            if (parsed) return formatLongDate(parsed.y, parsed.m, parsed.d);
+            return String(value);
+          }
+          const text = String(value).trim();
+          const m = text.match(/(\d{4})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})/);
+          if (m) return formatLongDate(Number(m[1]), Number(m[2]), Number(m[3]));
+          return text;
         };
 
         const parseMonthFromDateLike = (value: any) => {
           if (!value) return 1;
           if (value instanceof Date) return value.getMonth() + 1;
+          if (typeof value === "number") {
+            const parsed = XLSX.SSF.parse_date_code(value);
+            if (parsed) return Math.min(12, Math.max(1, Number(parsed.m)));
+            return 1;
+          }
           const text = String(value);
           const m = text.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
           if (m) return Math.min(12, Math.max(1, Number(m[2])));

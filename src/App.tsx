@@ -326,6 +326,9 @@ export default function App() {
   const t = (key: string) => TRANSLATIONS[lang][key] || key;
   const [importStatus, setImportStatus] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dataTableTopScrollRef = useRef<HTMLDivElement>(null);
+  const dataTableScrollRef = useRef<HTMLDivElement>(null);
+  const [dataTableScrollWidth, setDataTableScrollWidth] = useState<number>(0);
 
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [isLoading, setIsLoading] = useState(false);
@@ -344,6 +347,49 @@ export default function App() {
     setUsername(u);
     setIsKickedOut(false);
   };
+
+  useEffect(() => {
+    if (activeTab !== 'data') return;
+    const topEl = dataTableTopScrollRef.current;
+    const bodyEl = dataTableScrollRef.current;
+    if (!topEl || !bodyEl) return;
+
+    let syncing = false;
+
+    const syncFromTop = () => {
+      if (syncing) return;
+      syncing = true;
+      bodyEl.scrollLeft = topEl.scrollLeft;
+      syncing = false;
+    };
+
+    const syncFromBody = () => {
+      if (syncing) return;
+      syncing = true;
+      topEl.scrollLeft = bodyEl.scrollLeft;
+      syncing = false;
+    };
+
+    topEl.addEventListener('scroll', syncFromTop);
+    bodyEl.addEventListener('scroll', syncFromBody);
+    topEl.scrollLeft = bodyEl.scrollLeft;
+
+    return () => {
+      topEl.removeEventListener('scroll', syncFromTop);
+      bodyEl.removeEventListener('scroll', syncFromBody);
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'data') return;
+    const el = dataTableScrollRef.current;
+    if (!el) return;
+
+    const update = () => setDataTableScrollWidth(el.scrollWidth);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [activeTab, data, lang]);
 
   // Session monitor
   const checkSession = async () => {
@@ -580,20 +626,35 @@ export default function App() {
     reader.onload = async (event) => {
       try {
         const bstr = event.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         const rawData: any[] = XLSX.utils.sheet_to_json(ws);
 
+        const formatLongDate = (y: number, m: number, d: number) => `${y}年${m}月${d}日`;
+
         const normalizeDateText = (value: any) => {
           if (!value) return '';
-          if (value instanceof Date) return value.toISOString().slice(0, 10);
-          return String(value).trim();
+          if (value instanceof Date) return formatLongDate(value.getFullYear(), value.getMonth() + 1, value.getDate());
+          if (typeof value === 'number') {
+            const parsed = XLSX.SSF.parse_date_code(value);
+            if (parsed) return formatLongDate(parsed.y, parsed.m, parsed.d);
+            return String(value);
+          }
+          const text = String(value).trim();
+          const m = text.match(/(\d{4})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})/);
+          if (m) return formatLongDate(Number(m[1]), Number(m[2]), Number(m[3]));
+          return text;
         };
 
         const parseMonthFromDateLike = (value: any) => {
           if (!value) return 1;
           if (value instanceof Date) return value.getMonth() + 1;
+          if (typeof value === 'number') {
+            const parsed = XLSX.SSF.parse_date_code(value);
+            if (parsed) return Math.min(12, Math.max(1, Number(parsed.m)));
+            return 1;
+          }
           const text = String(value);
           const m = text.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
           if (m) return Math.min(12, Math.max(1, Number(m[2])));
@@ -1152,8 +1213,11 @@ export default function App() {
                 </div>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+            <div ref={dataTableTopScrollRef} className="h-4 overflow-x-auto overflow-y-hidden bg-white">
+              <div style={{ width: dataTableScrollWidth ? `${dataTableScrollWidth}px` : '100%' }} className="h-1" />
+            </div>
+            <div ref={dataTableScrollRef} className="overflow-x-auto">
+              <table className="w-full min-w-[1400px] text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-[10px] tracking-wider text-slate-500 font-bold whitespace-nowrap">
                     <th className="px-4 py-3 border-b border-slate-100">标题（客户名称）</th>
@@ -1187,6 +1251,26 @@ export default function App() {
                       return '其他配件';
                     })();
 
+                    const formatLongDateText = (value: any) => {
+                      if (!value) return '-';
+                      if (value instanceof Date) return `${value.getFullYear()}年${value.getMonth() + 1}月${value.getDate()}日`;
+                      if (typeof value === 'number') {
+                        const parsed = XLSX.SSF.parse_date_code(value);
+                        if (parsed) return `${parsed.y}年${parsed.m}月${parsed.d}日`;
+                        return String(value);
+                      }
+                      const text = String(value).trim();
+                      if (/^\d+(\.\d+)?$/.test(text)) {
+                        const n = Number(text);
+                        const parsed = XLSX.SSF.parse_date_code(n);
+                        if (parsed) return `${parsed.y}年${parsed.m}月${parsed.d}日`;
+                        return text;
+                      }
+                      const m = text.match(/(\d{4})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})/);
+                      if (m) return `${Number(m[1])}年${Number(m[2])}月${Number(m[3])}日`;
+                      return text;
+                    };
+
                     return (
                       <tr key={idx} className="hover:bg-slate-50 transition-colors">
                         <td className="px-4 py-3 border-b border-slate-50 font-medium text-slate-900 whitespace-nowrap">{row.customerName || '-'}</td>
@@ -1195,8 +1279,8 @@ export default function App() {
                         <td className="px-4 py-3 border-b border-slate-50 font-medium text-slate-900 whitespace-nowrap">{productModel || '-'}</td>
                         <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{(row as any).initialDept || '-'}</td>
                         <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{(row as any).mainDept || row.dept || '-'}</td>
-                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{(row as any).complaintDate || row.createdAt || '-'}</td>
-                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{(row as any).snDate || '-'}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{formatLongDateText((row as any).complaintDate || row.createdAt)}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{formatLongDateText((row as any).snDate)}</td>
                         <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">
                           <span className={cn("px-2 py-0.5 rounded-full text-[9px] font-bold", row.oob ? "bg-rose-50 text-rose-600" : "bg-slate-50 text-slate-400")}>
                             {row.oob ? '开箱损问题' : '非开箱损问题'}
