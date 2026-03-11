@@ -16,18 +16,17 @@ db.pragma("journal_mode = WAL");
 // --- Schema ---
 db.exec(`
   CREATE TABLE IF NOT EXISTS auth_users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
     last_session_id TEXT,
     createdAt TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
 
-// Migration for existing environments (wrapped in try-catch to ignore if column exists)
-try {
-  db.exec("ALTER TABLE auth_users ADD COLUMN last_session_id TEXT;");
-} catch (e) {
-  // Column already exists
-}
+// Migration for existing environments (wrapped in try-catch to ensure robustness)
+try { db.exec("ALTER TABLE auth_users ADD COLUMN username TEXT;"); } catch (e) {}
+try { db.exec("ALTER TABLE auth_users ADD COLUMN password_hash TEXT;"); } catch (e) {}
+try { db.exec("ALTER TABLE auth_users ADD COLUMN last_session_id TEXT;"); } catch (e) {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS quality_issues (
