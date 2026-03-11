@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     buildCommand: npm install && npm run build
-    startCommand: NODE_ENV=production node --loader tsx server.ts
+    startCommand: NODE_ENV=production node --import tsx server.ts
     envVars:
       - key: NODE_ENV
         value: production
