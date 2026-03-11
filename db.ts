@@ -31,6 +31,7 @@ try { db.exec("ALTER TABLE auth_users ADD COLUMN last_session_id TEXT;"); } catc
 db.exec(`
   CREATE TABLE IF NOT EXISTS quality_issues (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    year INTEGER NOT NULL DEFAULT 0,
     month INTEGER NOT NULL CHECK(month >= 1 AND month <= 12),
     customerName TEXT NOT NULL DEFAULT '未知客户',
     productQuantity INTEGER NOT NULL DEFAULT 0,
@@ -52,6 +53,7 @@ db.exec(`
     createdAt TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE INDEX IF NOT EXISTS idx_issues_year ON quality_issues(year);
   CREATE INDEX IF NOT EXISTS idx_issues_month ON quality_issues(month);
   CREATE INDEX IF NOT EXISTS idx_issues_productLine ON quality_issues(productLine);
   CREATE INDEX IF NOT EXISTS idx_issues_cause ON quality_issues(cause);
@@ -60,6 +62,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_issues_closed ON quality_issues(closed);
 `);
 
+try { db.exec("ALTER TABLE quality_issues ADD COLUMN year INTEGER NOT NULL DEFAULT 0;"); } catch (e) {}
 try { db.exec("ALTER TABLE quality_issues ADD COLUMN productQuantity INTEGER NOT NULL DEFAULT 0;"); } catch (e) {}
 try { db.exec("ALTER TABLE quality_issues ADD COLUMN productModelPath TEXT NOT NULL DEFAULT '';"); } catch (e) {}
 try { db.exec("ALTER TABLE quality_issues ADD COLUMN initialDept TEXT NOT NULL DEFAULT '';"); } catch (e) {}
@@ -80,6 +83,7 @@ if (userCount.count === 0) {
 // --- Types ---
 export interface QualityIssue {
   id?: number;
+  year?: number;
   month: number;
   customerName: string;
   productQuantity?: number;
@@ -102,6 +106,7 @@ export interface QualityIssue {
 }
 
 export interface IssueFilters {
+  year?: number | "all";
   month?: number | "all";
   productLine?: string;
   cause?: string;
@@ -115,6 +120,10 @@ function buildWhereClause(filters: IssueFilters) {
   const conditions: string[] = [];
   const params: any[] = [];
 
+  if (filters.year && filters.year !== "all") {
+    conditions.push("year = ?");
+    params.push(filters.year);
+  }
   if (filters.month && filters.month !== "all") {
     conditions.push("month = ?");
     params.push(filters.month);
@@ -171,6 +180,7 @@ export function getAllIssues(filters: IssueFilters = {}): QualityIssue[] {
 export function insertIssue(issue: Omit<QualityIssue, "id" | "createdAt">): QualityIssue {
   const stmt = db.prepare(`
     INSERT INTO quality_issues (
+      year,
       month,
       customerName,
       productQuantity,
@@ -191,6 +201,7 @@ export function insertIssue(issue: Omit<QualityIssue, "id" | "createdAt">): Qual
       creator
     )
     VALUES (
+      @year,
       @month,
       @customerName,
       @productQuantity,
@@ -212,6 +223,7 @@ export function insertIssue(issue: Omit<QualityIssue, "id" | "createdAt">): Qual
     )
   `);
   const normalized = {
+    year: 0,
     productQuantity: 0,
     productModelPath: "",
     initialDept: "",
@@ -230,6 +242,7 @@ export function insertIssue(issue: Omit<QualityIssue, "id" | "createdAt">): Qual
 export function bulkInsertIssues(issues: Omit<QualityIssue, "id" | "createdAt">[]): number {
   const stmt = db.prepare(`
     INSERT INTO quality_issues (
+      year,
       month,
       customerName,
       productQuantity,
@@ -250,6 +263,7 @@ export function bulkInsertIssues(issues: Omit<QualityIssue, "id" | "createdAt">[
       creator
     )
     VALUES (
+      @year,
       @month,
       @customerName,
       @productQuantity,
@@ -275,6 +289,7 @@ export function bulkInsertIssues(issues: Omit<QualityIssue, "id" | "createdAt">[
     let count = 0;
     for (const item of items) {
       stmt.run({
+        year: 0,
         productQuantity: 0,
         productModelPath: "",
         initialDept: "",

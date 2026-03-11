@@ -193,6 +193,9 @@ const TRANSLATIONS: Record<string, any> = {
     oobDmgLabel: '开箱损',
     nonOobDmgLabel: '非开箱损',
     month: '月份',
+    year: '年份',
+    selectYear: '请选择年份',
+    selectMonth: '请选择月份',
     jan: '1月',
     feb: '2月',
     mar: '3月',
@@ -289,6 +292,9 @@ const TRANSLATIONS: Record<string, any> = {
     oobDmgLabel: 'OOB Dmg',
     nonOobDmgLabel: 'Non-OOB',
     month: 'Month',
+    year: 'Year',
+    selectYear: 'Select year',
+    selectMonth: 'Select month',
     jan: 'Jan',
     feb: 'Feb',
     mar: 'Mar',
@@ -316,7 +322,8 @@ export default function App() {
   const [username, setUsername] = useState<string | null>(localStorage.getItem('username'));
   const [activeTab, setActiveTab] = useState('overview');
   const [lang, setLang] = useState<'中' | 'EN'>('中');
-  const [selectedMonth, setSelectedMonth] = useState<number | 'all'>(1);
+  const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
+  const [selectedMonth, setSelectedMonth] = useState<number | 'all'>('all');
   const [selectedProductLine, setSelectedProductLine] = useState<string>('all');
   const [selectedCause, setSelectedCause] = useState<string>('all');
   const [selectedDept, setSelectedDept] = useState<string>('all');
@@ -390,6 +397,27 @@ export default function App() {
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
   }, [activeTab, data, lang]);
+
+  const yearOptions = useMemo(() => {
+    const years = Array.from(
+      new Set(
+        data
+          .map((d: any) => {
+            if (typeof d.year === 'number' && d.year > 0) return d.year;
+            const text = String(d.complaintDate || d.createdAt || '').trim();
+            const m = text.match(/(\d{4})年/);
+            if (m) return Number(m[1]);
+            const dt = new Date(text);
+            if (!isNaN(dt.getTime())) return dt.getFullYear();
+            return undefined;
+          })
+          .filter(Boolean) as number[]
+      )
+    ).sort((a, b) => b - a);
+
+    if (years.length > 0) return years;
+    return [2026, 2025];
+  }, [data]);
 
   // Session monitor
   const checkSession = async () => {
@@ -483,28 +511,32 @@ export default function App() {
   // --- Computed Data ---
   const filteredData = useMemo(() => {
     return data.filter(d => {
-      const matchMonth = selectedMonth === 'all' || d.month === selectedMonth;
+      if (selectedYear === 'all' || selectedMonth === 'all') return false;
+      const matchYear = d.year === selectedYear;
+      const matchMonth = d.month === selectedMonth;
       const matchProductLine = selectedProductLine === 'all' || d.productLine === t(selectedProductLine) || d.productLine === selectedProductLine;
       const matchCause = selectedCause === 'all' || d.cause === t(selectedCause) || d.cause === selectedCause;
       const matchDept = selectedDept === 'all' || d.dept === t(selectedDept) || d.dept === selectedDept;
       const matchOob = selectedOob === 'all' || (selectedOob === 'oobDamage' ? d.oob >= 1 : d.oob === 0);
-      return matchMonth && matchProductLine && matchCause && matchDept && matchOob;
+      return matchYear && matchMonth && matchProductLine && matchCause && matchDept && matchOob;
     });
-  }, [selectedMonth, selectedProductLine, selectedCause, selectedDept, selectedOob, data, lang]);
+  }, [selectedYear, selectedMonth, selectedProductLine, selectedCause, selectedDept, selectedOob, data, lang]);
 
   const kpiStats = useMemo(() => {
-    const filterByMonth = (dList: any[], month: number | 'all') => {
+    const filterByYearMonth = (dList: any[], year: number | 'all', month: number | 'all') => {
       return dList.filter(d => {
-        const matchMonth = month === 'all' || d.month === month;
+        if (year === 'all' || month === 'all') return false;
+        const matchYear = d.year === year;
+        const matchMonth = d.month === month;
         const matchProductLine = selectedProductLine === 'all' || d.productLine === t(selectedProductLine) || d.productLine === selectedProductLine;
         const matchCause = selectedCause === 'all' || d.cause === t(selectedCause) || d.cause === selectedCause;
         const matchDept = selectedDept === 'all' || d.dept === t(selectedDept) || d.dept === selectedDept;
         const matchOob = selectedOob === 'all' || (selectedOob === 'oobDamage' ? d.oob >= 1 : d.oob === 0);
-        return matchMonth && matchProductLine && matchCause && matchDept && matchOob;
+        return matchYear && matchMonth && matchProductLine && matchCause && matchDept && matchOob;
       });
     };
 
-    const currData = filterByMonth(data, selectedMonth);
+    const currData = filterByYearMonth(data, selectedYear, selectedMonth);
     
     // Calculate current metrics
     const currTotalIssues = currData.reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
@@ -518,11 +550,12 @@ export default function App() {
 
     // Calculate previous metrics for trend
     let prevData: any[] = [];
-    if (selectedMonth === 'all') {
+    if (selectedYear === 'all' || selectedMonth === 'all') {
       prevData = [];
     } else {
       const prevMonth = selectedMonth === 1 ? 12 : selectedMonth - 1;
-      prevData = filterByMonth(data, prevMonth);
+      const prevYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear;
+      prevData = filterByYearMonth(data, prevYear, prevMonth);
     }
 
     const prevTotalIssues = prevData.reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
@@ -551,19 +584,21 @@ export default function App() {
       close: { val: currCloseRate.toFixed(1) + '%', trend: calcTrend(currCloseRate, prevCloseRate) },
       overdue: { val: currOverdue, trend: calcTrend(currOverdue, prevOverdue) }
     };
-  }, [selectedMonth, selectedProductLine, selectedCause, selectedDept, selectedOob, data, lang]);
+  }, [selectedYear, selectedMonth, selectedProductLine, selectedCause, selectedDept, selectedOob, data, lang]);
 
   const dynamicTrendHistory = useMemo(() => {
     const months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
     const monthKeys = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
     return months.map((m, idx) => {
       const monthData = data.filter(d => {
+        if (selectedYear === 'all') return false;
+        const matchYear = d.year === selectedYear;
         const matchMonth = d.month === m;
         const matchProductLine = selectedProductLine === 'all' || d.productLine === t(selectedProductLine) || d.productLine === selectedProductLine;
         const matchCause = selectedCause === 'all' || d.cause === t(selectedCause) || d.cause === selectedCause;
         const matchDept = selectedDept === 'all' || d.dept === t(selectedDept) || d.dept === selectedDept;
         const matchOob = selectedOob === 'all' || (selectedOob === 'oobDamage' ? d.oob >= 1 : d.oob === 0);
-        return matchMonth && matchProductLine && matchCause && matchDept && matchOob;
+        return matchYear && matchMonth && matchProductLine && matchCause && matchDept && matchOob;
       });
       
       const totalIssues = monthData.reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
@@ -577,7 +612,7 @@ export default function App() {
         avgTime: totalIssues > 0 ? 7 + Math.sin(m) * 3 : 0
       };
     });
-  }, [data, selectedProductLine, selectedCause, selectedDept, selectedOob, lang]);
+  }, [data, selectedYear, selectedProductLine, selectedCause, selectedDept, selectedOob, lang]);
 
   const dynamicPerformanceData = useMemo(() => {
     const creators: Record<string, { task: number, speed: number }> = {};
@@ -662,6 +697,21 @@ export default function App() {
           if (!isNaN(d.getTime())) return d.getMonth() + 1;
           return 1;
         };
+        const parseYearFromDateLike = (value: any) => {
+          if (!value) return 0;
+          if (value instanceof Date) return value.getFullYear();
+          if (typeof value === 'number') {
+            const parsed = XLSX.SSF.parse_date_code(value);
+            if (parsed) return Number(parsed.y) || 0;
+            return 0;
+          }
+          const text = String(value);
+          const m = text.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+          if (m) return Number(m[1]) || 0;
+          const d = new Date(text);
+          if (!isNaN(d.getTime())) return d.getFullYear();
+          return 0;
+        };
         
         // Map fields based on user's Excel image and requirements
         const processedData = rawData.map(row => {
@@ -695,6 +745,7 @@ export default function App() {
           })();
 
           return {
+            year: parseYearFromDateLike(row['创建时间']),
             month: parseMonthFromDateLike(row['创建时间']),
             customerName: row['客户名称'] || row['标题'] || row['标题_1'] || '未知客户',
             productQuantity: Number(row['产品数量']) || 0,
@@ -793,7 +844,10 @@ export default function App() {
   const handleExport = async () => {
     // Build query params from current filters
     const params = new URLSearchParams();
-    if (selectedMonth !== 'all') params.set('month', String(selectedMonth));
+    if (selectedYear !== 'all' && selectedMonth !== 'all') {
+      params.set('year', String(selectedYear));
+      params.set('month', String(selectedMonth));
+    }
     if (selectedProductLine !== 'all') params.set('productLine', selectedProductLine);
     if (selectedCause !== 'all') params.set('cause', selectedCause);
     if (selectedDept !== 'all') params.set('dept', selectedDept);
@@ -945,16 +999,44 @@ export default function App() {
 
             <div className="apple-card p-4 mb-6">
               <div className="flex items-center gap-2 mb-3 text-primary text-xs font-semibold"><Search size={14} /> {t('filter')}</div>
-              <div className="grid grid-cols-5 gap-4">
+              <div className="grid grid-cols-6 gap-4">
+                <div>
+                  <label className="block text-[10px] text-slate-500 mb-1 ml-1">{t('year')}</label>
+                  <div className="relative">
+                    <select 
+                      value={selectedYear}
+                      onChange={(e) => {
+                        if (e.target.value === 'all') {
+                          setSelectedYear('all');
+                          setSelectedMonth('all');
+                        } else {
+                          setSelectedYear(parseInt(e.target.value, 10));
+                          setSelectedMonth('all');
+                        }
+                      }}
+                      className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-md text-xs h-8 pl-2 pr-8 focus:outline-none focus:ring-1 focus:ring-primary/20"
+                    >
+                      <option value="all">{t('selectYear')}</option>
+                      {yearOptions.map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
                 <div>
                   <label className="block text-[10px] text-slate-500 mb-1 ml-1">{t('month')}</label>
                   <div className="relative">
                     <select 
                       value={selectedMonth}
-                      onChange={(e) => setSelectedMonth(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-                      className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-md text-xs h-8 pl-2 pr-8 focus:outline-none focus:ring-1 focus:ring-primary/20"
+                      onChange={(e) => setSelectedMonth(e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10))}
+                      disabled={selectedYear === 'all'}
+                      className={cn(
+                        "w-full appearance-none bg-slate-50 border border-slate-200 rounded-md text-xs h-8 pl-2 pr-8 focus:outline-none focus:ring-1 focus:ring-primary/20",
+                        selectedYear === 'all' && "opacity-60 cursor-not-allowed"
+                      )}
                     >
-                      <option value="all">{t('all')}</option>
+                      <option value="all">{t('selectMonth')}</option>
                       <option value="1">{t('jan')}</option>
                       <option value="2">{t('feb')}</option>
                       <option value="3">{t('mar')}</option>

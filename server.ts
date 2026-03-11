@@ -123,6 +123,7 @@ export async function startServer(portOverride?: number): Promise<number> {
   app.get("/api/issues", (req, res) => {
     try {
       const filters: IssueFilters = {
+        year: req.query.year ? (req.query.year === "all" ? "all" : parseInt(req.query.year as string, 10)) : "all",
         month: req.query.month ? (req.query.month === "all" ? "all" : parseInt(req.query.month as string, 10)) : "all",
         productLine: (req.query.productLine as string) || "all",
         cause: (req.query.cause as string) || "all",
@@ -211,6 +212,7 @@ export async function startServer(portOverride?: number): Promise<number> {
   app.get("/api/kpi", (req, res) => {
     try {
       const filters: IssueFilters = {
+        year: req.query.year ? (req.query.year === "all" ? "all" : parseInt(req.query.year as string, 10)) : "all",
         month: req.query.month ? (req.query.month === "all" ? "all" : parseInt(req.query.month as string, 10)) : "all",
         productLine: (req.query.productLine as string) || "all",
         cause: (req.query.cause as string) || "all",
@@ -229,6 +231,7 @@ export async function startServer(portOverride?: number): Promise<number> {
   app.get("/api/trend", (req, res) => {
     try {
       const filters: IssueFilters = {
+        year: req.query.year ? (req.query.year === "all" ? "all" : parseInt(req.query.year as string, 10)) : "all",
         productLine: (req.query.productLine as string) || "all",
         cause: (req.query.cause as string) || "all",
         dept: (req.query.dept as string) || "all",
@@ -246,6 +249,7 @@ export async function startServer(portOverride?: number): Promise<number> {
   app.get("/api/ranking", (req, res) => {
     try {
       const filters: IssueFilters = {
+        year: req.query.year ? (req.query.year === "all" ? "all" : parseInt(req.query.year as string, 10)) : "all",
         month: req.query.month ? (req.query.month === "all" ? "all" : parseInt(req.query.month as string, 10)) : "all",
         productLine: (req.query.productLine as string) || "all",
         cause: (req.query.cause as string) || "all",
@@ -264,6 +268,7 @@ export async function startServer(portOverride?: number): Promise<number> {
   app.get("/api/distribution", (req, res) => {
     try {
       const filters: IssueFilters = {
+        year: req.query.year ? (req.query.year === "all" ? "all" : parseInt(req.query.year as string, 10)) : "all",
         month: req.query.month ? (req.query.month === "all" ? "all" : parseInt(req.query.month as string, 10)) : "all",
         productLine: (req.query.productLine as string) || "all",
         cause: (req.query.cause as string) || "all",
@@ -282,6 +287,7 @@ export async function startServer(portOverride?: number): Promise<number> {
   app.get("/api/performance", (req, res) => {
     try {
       const filters: IssueFilters = {
+        year: req.query.year ? (req.query.year === "all" ? "all" : parseInt(req.query.year as string, 10)) : "all",
         month: req.query.month ? (req.query.month === "all" ? "all" : parseInt(req.query.month as string, 10)) : "all",
         productLine: (req.query.productLine as string) || "all",
         cause: (req.query.cause as string) || "all",
@@ -340,6 +346,21 @@ export async function startServer(portOverride?: number): Promise<number> {
           if (!isNaN(d.getTime())) return d.getMonth() + 1;
           return 1;
         };
+        const parseYearFromDateLike = (value: any) => {
+          if (!value) return 0;
+          if (value instanceof Date) return value.getFullYear();
+          if (typeof value === "number") {
+            const parsed = XLSX.SSF.parse_date_code(value);
+            if (parsed) return Number(parsed.y) || 0;
+            return 0;
+          }
+          const text = String(value);
+          const m = text.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+          if (m) return Number(m[1]) || 0;
+          const d = new Date(text);
+          if (!isNaN(d.getTime())) return d.getFullYear();
+          return 0;
+        };
 
         const productModelPath = String(row["产品型号"] || row["产品型号名称"] || "").trim();
         const segments = productModelPath
@@ -371,6 +392,7 @@ export async function startServer(portOverride?: number): Promise<number> {
         })();
 
         return {
+          year: parseYearFromDateLike(row["创建时间"]),
           month: parseMonthFromDateLike(row["创建时间"]),
           customerName: row["客户名称"] || row["标题"] || row["标题_1"] || "未知客户",
           productQuantity: Number(row["产品数量"]) || 0,
@@ -404,6 +426,7 @@ export async function startServer(portOverride?: number): Promise<number> {
   app.get("/api/export", (req, res) => {
     try {
       const filters: IssueFilters = {
+        year: req.query.year ? (req.query.year === "all" ? "all" : parseInt(req.query.year as string, 10)) : "all",
         month: req.query.month ? (req.query.month === "all" ? "all" : parseInt(req.query.month as string, 10)) : "all",
         productLine: (req.query.productLine as string) || "all",
         cause: (req.query.cause as string) || "all",
@@ -414,6 +437,7 @@ export async function startServer(portOverride?: number): Promise<number> {
 
       // Map to Chinese headers for export
       const exportData = issues.map((row) => ({
+        年份: (row as any).year ?? "",
         月份: row.month,
         客户名称: row.customerName,
         产品型号: row.model,
@@ -432,6 +456,7 @@ export async function startServer(portOverride?: number): Promise<number> {
 
       // Set column widths
       ws["!cols"] = [
+        { wch: 6 },  // 年份
         { wch: 6 },  // 月份
         { wch: 20 }, // 客户名称
         { wch: 18 }, // 产品型号
