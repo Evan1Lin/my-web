@@ -681,7 +681,6 @@ export default function App() {
           <SidebarItem icon={LayoutDashboard} label={t('overview')} active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
           <SidebarItem icon={TrendingUp} label={t('trend')} active={activeTab === 'trend'} onClick={() => setActiveTab('trend')} />
           <SidebarItem icon={Factory} label={t('production')} active={activeTab === 'production'} onClick={() => setActiveTab('production')} />
-          <SidebarItem icon={BellRing} label={t('performance')} active={activeTab === 'performance'} onClick={() => setActiveTab('performance')} />
           <SidebarItem icon={Settings} label={t('data')} active={activeTab === 'data'} onClick={() => setActiveTab('data')} />
         </nav>
         
@@ -697,9 +696,22 @@ export default function App() {
             </span>
           </div>
           
-          <button onClick={handleLogout} className="flex justify-center items-center gap-2 py-2 mt-1 rounded-lg text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all">
-            <LogOut size={16} /> 退 出 登 录
-          </button>
+          <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 mt-2">
+            <div className="flex items-center gap-3">
+              <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold uppercase">
+                {username ? username[0] : 'U'}
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-bold text-slate-900 leading-none">{username || 'User'}</p>
+                <div className="mt-1 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold bg-primary/10 text-primary">
+                  ADMIN
+                </div>
+              </div>
+            </div>
+            <button onClick={handleLogout} className="w-full mt-3 flex justify-center items-center gap-2 py-1.5 rounded-md text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all">
+              <LogOut size={14} /> 退出登录
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -712,7 +724,6 @@ export default function App() {
               {activeTab === 'overview' && t('title')}
               {activeTab === 'trend' && t('trend')}
               {activeTab === 'production' && t('production')}
-              {activeTab === 'performance' && t('performance')}
               {activeTab === 'data' && t('data')}
             </h1>
             <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-medium">{t('subtitle')}</p>
@@ -997,60 +1008,6 @@ export default function App() {
                         <div className="h-full rounded-full" style={{ width: `${(item.value / 10) * 100}%`, backgroundColor: item.color }} />
                       </div>
                       <div className="w-8 text-[10px] font-bold text-slate-900">{item.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'performance' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="apple-card p-6">
-                <h3 className="text-sm font-semibold text-slate-900 mb-6 flex items-center gap-2"><Users size={16} className="text-primary" /> {t('teamEff')}</h3>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dynamicPerformanceData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Bar dataKey="task" fill="#3b82f6" radius={[4, 4, 0, 0]} name={t('issueCount')} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div className="apple-card p-6">
-                <h3 className="text-sm font-semibold text-slate-900 mb-6 flex items-center gap-2"><Target size={16} className="text-emerald-500" /> {t('avgResp')}</h3>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dynamicPerformanceData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Bar dataKey="speed" fill="#10b981" radius={[4, 4, 0, 0]} name={t('avgResp')} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div className="apple-card p-6">
-                <h3 className="text-sm font-semibold text-slate-900 mb-6 flex items-center gap-2"><BellRing size={16} className="text-rose-500" /> {t('todoAlert')}</h3>
-                <div className="space-y-4">
-                  {dynamicPerformanceData.sort((a, b) => b.task - a.task).map((person, idx) => (
-                    <div key={idx} className="flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className="size-8 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-600">{person.name[0]}</div>
-                        <span className="text-xs font-medium text-slate-700">{person.name}</span>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] font-bold text-slate-900">{person.task} {t('issueCount')}</p>
-                        <p className="text-[8px] text-rose-500">3 {t('overdue')}</p>
-                      </div>
                     </div>
                   ))}
                 </div>
