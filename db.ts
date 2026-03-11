@@ -17,11 +17,19 @@ db.pragma("journal_mode = WAL");
 db.exec(`
   CREATE TABLE IF NOT EXISTS auth_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
+    last_session_id TEXT,
     createdAt TEXT NOT NULL DEFAULT (datetime('now'))
   );
+`);
 
+// Migration for existing environments (wrapped in try-catch to ignore if column exists)
+try {
+  db.exec("ALTER TABLE auth_users ADD COLUMN last_session_id TEXT;");
+} catch (e) {
+  // Column already exists
+}
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS quality_issues (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     month INTEGER NOT NULL CHECK(month >= 1 AND month <= 12),
@@ -121,6 +129,11 @@ function buildWhereClause(filters: IssueFilters) {
 /** Get user by username for auth */
 export function getUserByUsername(username: string): any {
   return db.prepare("SELECT * FROM auth_users WHERE username = ?").get(username);
+}
+
+/** Update user's last session ID */
+export function updateUserSessionId(username: string, sessionId: string): void {
+  db.prepare("UPDATE auth_users SET last_session_id = ? WHERE username = ?").run(sessionId, username);
 }
 
 /** Get all issues, optionally filtered */

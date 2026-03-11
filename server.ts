@@ -7,6 +7,7 @@ import * as XLSX from "xlsx";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { randomUUID } from "crypto";
 
 import {
   getAllIssues,
@@ -21,6 +22,7 @@ import {
   getCauseDistribution,
   getPerformanceData,
   getUserByUsername,
+  updateUserSessionId,
   type QualityIssue,
   type IssueFilters,
 } from "./db.ts";
@@ -58,11 +60,22 @@ export async function startServer(portOverride?: number): Promise<number> {
       return res.status(401).json({ success: false, error: "未授权：请先登录" });
     }
     
-    jwt.verify(token, JWT_SECRET, (err, user) => {
+    jwt.verify(token, JWT_SECRET, (err, decoded: any) => {
       if (err) {
         return res.status(403).json({ success: false, error: "登录已过期或无效" });
       }
-      (req as any).user = user;
+      
+      // Concurrent session check
+      const user = getUserByUsername(decoded.username);
+      if (!user || user.last_session_id !== decoded.sessionId) {
+        return res.status(401).json({ 
+          success: false, 
+          error: "SESSION_EXPIRED_CONCURRENT", 
+          message: "该账号已被他人登录！" 
+        });
+      }
+
+      (req as any).user = decoded;
       next();
     });
   });
@@ -85,7 +98,10 @@ export async function startServer(portOverride?: number): Promise<number> {
         return res.status(401).json({ success: false, error: "用户名或密码错误" });
       }
       
-      const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: "7d" });
+      const sessionId = randomUUID();
+      updateUserSessionId(user.username, sessionId);
+      
+      const token = jwt.sign({ id: user.id, username: user.username, sessionId }, JWT_SECRET, { expiresIn: "7d" });
       res.json({ success: true, token, username: user.username });
     } catch (error: any) {
       console.error("Login error:", error);

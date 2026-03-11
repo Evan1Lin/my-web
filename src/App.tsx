@@ -349,11 +349,16 @@ export default function App() {
       const res = await fetch('/api/issues', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      const result = await res.json();
+      
       if (res.status === 401 || res.status === 403) {
+        if (result.error === 'SESSION_EXPIRED_CONCURRENT') {
+          window.alert(result.message || '该账号已被他人登录！');
+        }
         handleLogout();
         return;
       }
-      const result = await res.json();
+      
       if (result.success && result.data.length > 0) {
         setData(result.data);
       }
@@ -568,11 +573,16 @@ export default function App() {
               },
               body: JSON.stringify(processedData),
             });
+            const result = await res.json();
+            
             if (res.status === 401 || res.status === 403) {
+              if (result.error === 'SESSION_EXPIRED_CONCURRENT') {
+                window.alert(result.message || '该账号已被他人登录！');
+              }
               handleLogout();
               return;
             }
-            const result = await res.json();
+            
             if (result.success) {
               // Reload from backend to get IDs
               await loadDataFromBackend();
@@ -604,7 +614,12 @@ export default function App() {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
+        const result = await res.json();
+        
         if (res.status === 401 || res.status === 403) {
+          if (result.error === 'SESSION_EXPIRED_CONCURRENT') {
+            window.alert(result.message || '该账号已被他人登录！');
+          }
           handleLogout();
           return;
         }
@@ -629,12 +644,22 @@ export default function App() {
       const res = await fetch(`/api/export?${params.toString()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      const result = await res.json().catch(() => ({})); 
+
       if (res.status === 401 || res.status === 403) {
+        if (result.error === 'SESSION_EXPIRED_CONCURRENT') {
+          window.alert(result.message || '该账号已被他人登录！');
+        }
         handleLogout();
         return;
       }
       
-      const blob = await res.blob();
+      // If it's a blob, we need to fetch again or handle response type correctly
+      // For simplicity, if we get here and it's 200, assume it's data or we handle as blob
+      const blobRes = await fetch(`/api/export?${params.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const blob = await blobRes.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
