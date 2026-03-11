@@ -346,25 +346,47 @@ export default function App() {
   };
 
   // Session monitor
+  const checkSession = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/auth/session-status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const result = await res.json();
+      if (res.status === 401 && result.error === 'SESSION_EXPIRED_CONCURRENT') {
+        setIsKickedOut(true);
+      }
+    } catch (err) {
+      console.error('Session monitor error:', err);
+    }
+  };
+
   useEffect(() => {
     if (!token) return;
 
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch('/api/auth/session-status', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const result = await res.json();
-        if (res.status === 401 && result.error === 'SESSION_EXPIRED_CONCURRENT') {
-          setIsKickedOut(true);
-        }
-      } catch (err) {
-        console.error('Session monitor error:', err);
-      }
-    }, 10000); // Check every 10 seconds
+    // Check immediately on mount/token change
+    checkSession();
 
-    return () => clearInterval(interval);
+    const interval = setInterval(checkSession, 2000); // Check every 2 seconds
+
+    // Check when window regains focus
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkSession();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [token]);
+
+  // Check session when switching tabs to ensure immediate feedback
+  useEffect(() => {
+    if (token) checkSession();
+  }, [activeTab]);
 
   // Load data from backend on mount
   const loadDataFromBackend = async () => {
