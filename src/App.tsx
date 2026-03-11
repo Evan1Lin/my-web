@@ -584,25 +584,73 @@ export default function App() {
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         const rawData: any[] = XLSX.utils.sheet_to_json(ws);
+
+        const normalizeDateText = (value: any) => {
+          if (!value) return '';
+          if (value instanceof Date) return value.toISOString().slice(0, 10);
+          return String(value).trim();
+        };
+
+        const parseMonthFromDateLike = (value: any) => {
+          if (!value) return 1;
+          if (value instanceof Date) return value.getMonth() + 1;
+          const text = String(value);
+          const m = text.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+          if (m) return Math.min(12, Math.max(1, Number(m[2])));
+          const d = new Date(text);
+          if (!isNaN(d.getTime())) return d.getMonth() + 1;
+          return 1;
+        };
         
         // Map fields based on user's Excel image and requirements
         const processedData = rawData.map(row => {
-          let month = 1;
-          if (row['创建时间']) {
-            const date = new Date(row['创建时间']);
-            if (!isNaN(date.getTime())) month = date.getMonth() + 1;
-          }
+          const productModelPath = String(row['产品型号'] || row['产品型号名称'] || '').trim();
+          const segments = productModelPath
+            .split('/')
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+          const level1 = segments[0] || '';
+
+          const productLine = (() => {
+            if (level1.includes('机械臂')) return 'roboticArm';
+            if (level1.includes('机器人')) return 'robot';
+            if (level1.includes('关节')) return 'joint';
+            if (level1.includes('其他')) return 'others';
+            return 'others';
+          })();
+
+          const issueQuantity = Number(row['问题数量']) || 0;
+          const closedQuantity = Number(row['问题关闭数量']) || 0;
+
+          const oobRaw = row['是否开箱损'];
+          const oobText = typeof oobRaw === 'string' ? oobRaw.trim() : oobRaw;
+          const oob = (() => {
+            if (oobText === true || oobText === '是' || oobText === 'Y') return 1;
+            if (typeof oobText === 'string') {
+              if (oobText.includes('非开箱损')) return 0;
+              if (oobText.includes('开箱损')) return 1;
+            }
+            return 0;
+          })();
 
           return {
-            month,
+            month: parseMonthFromDateLike(row['创建时间']),
             customerName: row['客户名称'] || row['标题'] || row['标题_1'] || '未知客户',
-            model: row['产品型号'] || '未知型号',
+            productQuantity: Number(row['产品数量']) || 0,
+            productModelPath: productModelPath || '未知型号',
+            model: segments[segments.length - 1] || productModelPath || '未知型号',
+            initialDept: String(row['问题初判主责部门'] || '').trim(),
+            mainDept: String(row['问题主责部门'] || '').trim(),
+            complaintDate: normalizeDateText(row['创建时间']),
+            snDate: normalizeDateText(row['SN日期']),
             cause: row['根因分类'] || '未分类',
-            dept: row['产品归属'] || '未指定',
-            productLine: row['问题分析'] || '其他配件',
-            issueQuantity: Number(row['问题数量']) || 1,
-            closed: row['是否完成'] === '是' || row['是否完成'] === true || row['是否完成'] === 'Y' ? 1 : 0,
-            oob: row['是否开箱损'] === '是' || row['是否开箱损'] === true || row['是否开箱损'] === '开箱损问题' ? 1 : 0,
+            analysisType: String(row['问题分析类型'] || '').trim(),
+            dept: String(row['问题主责部门'] || row['产品归属'] || '未指定').trim(),
+            productLine,
+            issueQuantity,
+            closedQuantity,
+            closed: issueQuantity > 0 && closedQuantity >= issueQuantity ? 1 : 0,
+            oob,
             creator: row['创建人'] || 'System'
           };
         });
@@ -1107,34 +1155,60 @@ export default function App() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                    <th className="px-6 py-4 border-b border-slate-100">{t('customerName')}</th>
-                    <th className="px-6 py-4 border-b border-slate-100">{t('model')}</th>
-                    <th className="px-6 py-4 border-b border-slate-100">{t('rootCause')}</th>
-                    <th className="px-6 py-4 border-b border-slate-100">{t('issueCount')}</th>
-                    <th className="px-6 py-4 border-b border-slate-100">{t('status')}</th>
-                    <th className="px-6 py-4 border-b border-slate-100">{t('oobStatus')}</th>
+                  <tr className="bg-slate-50 text-[10px] tracking-wider text-slate-500 font-bold whitespace-nowrap">
+                    <th className="px-4 py-3 border-b border-slate-100">标题（客户名称）</th>
+                    <th className="px-4 py-3 border-b border-slate-100">产品数量</th>
+                    <th className="px-4 py-3 border-b border-slate-100">产品类型</th>
+                    <th className="px-4 py-3 border-b border-slate-100">产品型号</th>
+                    <th className="px-4 py-3 border-b border-slate-100">问题初判主责部门</th>
+                    <th className="px-4 py-3 border-b border-slate-100">问题主责部门</th>
+                    <th className="px-4 py-3 border-b border-slate-100">创建时间</th>
+                    <th className="px-4 py-3 border-b border-slate-100">SN日期（发货日期）</th>
+                    <th className="px-4 py-3 border-b border-slate-100">是否开箱损</th>
+                    <th className="px-4 py-3 border-b border-slate-100">根因分类</th>
+                    <th className="px-4 py-3 border-b border-slate-100">问题分析类型</th>
+                    <th className="px-4 py-3 border-b border-slate-100 text-right">问题数量</th>
+                    <th className="px-4 py-3 border-b border-slate-100 text-right">问题关闭数量</th>
                   </tr>
                 </thead>
                 <tbody className="text-xs text-slate-600">
-                  {filteredData.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 border-b border-slate-50 font-medium text-slate-900">{row.customerName}</td>
-                      <td className="px-6 py-4 border-b border-slate-50 font-medium text-slate-900">{row.model}</td>
-                      <td className="px-6 py-4 border-b border-slate-50">{row.cause}</td>
-                      <td className="px-6 py-4 border-b border-slate-50">{row.issueQuantity}</td>
-                      <td className="px-6 py-4 border-b border-slate-50">
-                        <span className={cn("px-2 py-0.5 rounded-full text-[9px] font-bold", row.closed ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600")}>
-                          {row.closed ? t('closed') : t('processing')}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 border-b border-slate-50">
-                        <span className={cn("px-2 py-0.5 rounded-full text-[9px] font-bold", row.oob ? "bg-rose-50 text-rose-600" : "bg-slate-50 text-slate-400")}>
-                          {row.oob ? t('oobDmgLabel') : t('nonOobDmgLabel')}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredData.map((row, idx) => {
+                    const productModelPath = String((row as any).productModelPath || '').trim();
+                    const segments = productModelPath
+                      .split('/')
+                      .map((s: string) => s.trim())
+                      .filter(Boolean);
+                    const productType = segments[0] || '';
+                    const productModel = segments.length ? segments[segments.length - 1] : (row.model || '');
+                    const productTypeFallback = (() => {
+                      if (row.productLine === 'robot') return '机器人';
+                      if (row.productLine === 'roboticArm') return '机械臂';
+                      if (row.productLine === 'joint') return '关节';
+                      return '其他配件';
+                    })();
+
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 border-b border-slate-50 font-medium text-slate-900 whitespace-nowrap">{row.customerName || '-'}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{typeof (row as any).productQuantity === 'number' ? (row as any).productQuantity : '-'}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{productType || productTypeFallback}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 font-medium text-slate-900 whitespace-nowrap">{productModel || '-'}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{(row as any).initialDept || '-'}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{(row as any).mainDept || row.dept || '-'}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{(row as any).complaintDate || row.createdAt || '-'}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{(row as any).snDate || '-'}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">
+                          <span className={cn("px-2 py-0.5 rounded-full text-[9px] font-bold", row.oob ? "bg-rose-50 text-rose-600" : "bg-slate-50 text-slate-400")}>
+                            {row.oob ? '开箱损问题' : '非开箱损问题'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{row.cause || '-'}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{(row as any).analysisType || '-'}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 text-right whitespace-nowrap">{row.issueQuantity ?? '-'}</td>
+                        <td className="px-4 py-3 border-b border-slate-50 text-right whitespace-nowrap">{(row as any).closedQuantity ?? (row.closed ? row.issueQuantity : 0)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

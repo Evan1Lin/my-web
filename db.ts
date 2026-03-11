@@ -33,11 +33,19 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     month INTEGER NOT NULL CHECK(month >= 1 AND month <= 12),
     customerName TEXT NOT NULL DEFAULT '未知客户',
+    productQuantity INTEGER NOT NULL DEFAULT 0,
+    productModelPath TEXT NOT NULL DEFAULT '',
     model TEXT NOT NULL DEFAULT '未知型号',
+    initialDept TEXT NOT NULL DEFAULT '',
+    mainDept TEXT NOT NULL DEFAULT '',
+    complaintDate TEXT NOT NULL DEFAULT '',
+    snDate TEXT NOT NULL DEFAULT '',
     cause TEXT NOT NULL DEFAULT '未分类',
+    analysisType TEXT NOT NULL DEFAULT '',
     dept TEXT NOT NULL DEFAULT '未指定',
     productLine TEXT NOT NULL DEFAULT '其他配件',
     issueQuantity INTEGER NOT NULL DEFAULT 1,
+    closedQuantity INTEGER NOT NULL DEFAULT 0,
     closed INTEGER NOT NULL DEFAULT 0 CHECK(closed IN (0, 1)),
     oob INTEGER NOT NULL DEFAULT 0 CHECK(oob IN (0, 1)),
     creator TEXT NOT NULL DEFAULT 'System',
@@ -52,6 +60,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_issues_closed ON quality_issues(closed);
 `);
 
+try { db.exec("ALTER TABLE quality_issues ADD COLUMN productQuantity INTEGER NOT NULL DEFAULT 0;"); } catch (e) {}
+try { db.exec("ALTER TABLE quality_issues ADD COLUMN productModelPath TEXT NOT NULL DEFAULT '';"); } catch (e) {}
+try { db.exec("ALTER TABLE quality_issues ADD COLUMN initialDept TEXT NOT NULL DEFAULT '';"); } catch (e) {}
+try { db.exec("ALTER TABLE quality_issues ADD COLUMN mainDept TEXT NOT NULL DEFAULT '';"); } catch (e) {}
+try { db.exec("ALTER TABLE quality_issues ADD COLUMN complaintDate TEXT NOT NULL DEFAULT '';"); } catch (e) {}
+try { db.exec("ALTER TABLE quality_issues ADD COLUMN snDate TEXT NOT NULL DEFAULT '';"); } catch (e) {}
+try { db.exec("ALTER TABLE quality_issues ADD COLUMN analysisType TEXT NOT NULL DEFAULT '';"); } catch (e) {}
+try { db.exec("ALTER TABLE quality_issues ADD COLUMN closedQuantity INTEGER NOT NULL DEFAULT 0;"); } catch (e) {}
+
 // --- Initialize default user ---
 const userCount = db.prepare("SELECT COUNT(*) as count FROM auth_users").get() as any;
 if (userCount.count === 0) {
@@ -65,11 +82,19 @@ export interface QualityIssue {
   id?: number;
   month: number;
   customerName: string;
+  productQuantity?: number;
+  productModelPath?: string;
   model: string;
+  initialDept?: string;
+  mainDept?: string;
+  complaintDate?: string;
+  snDate?: string;
   cause: string;
+  analysisType?: string;
   dept: string;
   productLine: string;
   issueQuantity: number;
+  closedQuantity?: number;
   closed: number;
   oob: number;
   creator: string;
@@ -145,24 +170,121 @@ export function getAllIssues(filters: IssueFilters = {}): QualityIssue[] {
 /** Insert a single issue */
 export function insertIssue(issue: Omit<QualityIssue, "id" | "createdAt">): QualityIssue {
   const stmt = db.prepare(`
-    INSERT INTO quality_issues (month, customerName, model, cause, dept, productLine, issueQuantity, closed, oob, creator)
-    VALUES (@month, @customerName, @model, @cause, @dept, @productLine, @issueQuantity, @closed, @oob, @creator)
+    INSERT INTO quality_issues (
+      month,
+      customerName,
+      productQuantity,
+      productModelPath,
+      model,
+      initialDept,
+      mainDept,
+      complaintDate,
+      snDate,
+      cause,
+      analysisType,
+      dept,
+      productLine,
+      issueQuantity,
+      closedQuantity,
+      closed,
+      oob,
+      creator
+    )
+    VALUES (
+      @month,
+      @customerName,
+      @productQuantity,
+      @productModelPath,
+      @model,
+      @initialDept,
+      @mainDept,
+      @complaintDate,
+      @snDate,
+      @cause,
+      @analysisType,
+      @dept,
+      @productLine,
+      @issueQuantity,
+      @closedQuantity,
+      @closed,
+      @oob,
+      @creator
+    )
   `);
-  const result = stmt.run(issue);
-  return { ...issue, id: result.lastInsertRowid as number } as QualityIssue;
+  const normalized = {
+    productQuantity: 0,
+    productModelPath: "",
+    initialDept: "",
+    mainDept: "",
+    complaintDate: "",
+    snDate: "",
+    analysisType: "",
+    closedQuantity: 0,
+    ...issue,
+  };
+  const result = stmt.run(normalized);
+  return { ...normalized, id: result.lastInsertRowid as number } as QualityIssue;
 }
 
 /** Bulk insert issues using a transaction for performance */
 export function bulkInsertIssues(issues: Omit<QualityIssue, "id" | "createdAt">[]): number {
   const stmt = db.prepare(`
-    INSERT INTO quality_issues (month, customerName, model, cause, dept, productLine, issueQuantity, closed, oob, creator)
-    VALUES (@month, @customerName, @model, @cause, @dept, @productLine, @issueQuantity, @closed, @oob, @creator)
+    INSERT INTO quality_issues (
+      month,
+      customerName,
+      productQuantity,
+      productModelPath,
+      model,
+      initialDept,
+      mainDept,
+      complaintDate,
+      snDate,
+      cause,
+      analysisType,
+      dept,
+      productLine,
+      issueQuantity,
+      closedQuantity,
+      closed,
+      oob,
+      creator
+    )
+    VALUES (
+      @month,
+      @customerName,
+      @productQuantity,
+      @productModelPath,
+      @model,
+      @initialDept,
+      @mainDept,
+      @complaintDate,
+      @snDate,
+      @cause,
+      @analysisType,
+      @dept,
+      @productLine,
+      @issueQuantity,
+      @closedQuantity,
+      @closed,
+      @oob,
+      @creator
+    )
   `);
 
   const insertMany = db.transaction((items: Omit<QualityIssue, "id" | "createdAt">[]) => {
     let count = 0;
     for (const item of items) {
-      stmt.run(item);
+      stmt.run({
+        productQuantity: 0,
+        productModelPath: "",
+        initialDept: "",
+        mainDept: "",
+        complaintDate: "",
+        snDate: "",
+        analysisType: "",
+        closedQuantity: 0,
+        ...item,
+      });
       count++;
     }
     return count;
