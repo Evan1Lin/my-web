@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
+import bcrypt from "bcryptjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,6 +15,13 @@ db.pragma("journal_mode = WAL");
 
 // --- Schema ---
 db.exec(`
+  CREATE TABLE IF NOT EXISTS auth_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS quality_issues (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     month INTEGER NOT NULL CHECK(month >= 1 AND month <= 12),
@@ -36,6 +44,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_issues_oob ON quality_issues(oob);
   CREATE INDEX IF NOT EXISTS idx_issues_closed ON quality_issues(closed);
 `);
+
+// --- Initialize default user ---
+const userCount = db.prepare("SELECT COUNT(*) as count FROM auth_users").get() as any;
+if (userCount.count === 0) {
+  const defaultHash = bcrypt.hashSync("realman", 10);
+  db.prepare("INSERT INTO auth_users (username, password_hash) VALUES (?, ?)").run("evan", defaultHash);
+  console.log("✅ Created default admin user: evan");
+}
 
 // --- Types ---
 export interface QualityIssue {
@@ -101,6 +117,11 @@ function buildWhereClause(filters: IssueFilters) {
 }
 
 // --- CRUD Operations ---
+
+/** Get user by username for auth */
+export function getUserByUsername(username: string): any {
+  return db.prepare("SELECT * FROM auth_users WHERE username = ?").get(username);
+}
 
 /** Get all issues, optionally filtered */
 export function getAllIssues(filters: IssueFilters = {}): QualityIssue[] {

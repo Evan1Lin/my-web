@@ -26,7 +26,8 @@ import {
   Clock,
   Users,
   Target,
-  Layers
+  Layers,
+  LogOut
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { 
@@ -49,6 +50,7 @@ import {
 } from 'recharts';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import Login from './Login';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -308,6 +310,8 @@ const TRANSLATIONS: Record<string, any> = {
 };
 
 export default function App() {
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [username, setUsername] = useState<string | null>(localStorage.getItem('username'));
   const [activeTab, setActiveTab] = useState('overview');
   const [lang, setLang] = useState<'中' | 'EN'>('中');
   const [selectedMonth, setSelectedMonth] = useState<number | 'all'>(1);
@@ -323,11 +327,32 @@ export default function App() {
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [isLoading, setIsLoading] = useState(false);
 
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+    setToken(null);
+    setUsername(null);
+  };
+
+  const handleLogin = (t: string, u: string) => {
+    localStorage.setItem('token', t);
+    localStorage.setItem('username', u);
+    setToken(t);
+    setUsername(u);
+  };
+
   // Load data from backend on mount
   const loadDataFromBackend = async () => {
+    if (!token) return;
     try {
       setIsLoading(true);
-      const res = await fetch('/api/issues');
+      const res = await fetch('/api/issues', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status === 401 || res.status === 403) {
+        handleLogout();
+        return;
+      }
       const result = await res.json();
       if (result.success && result.data.length > 0) {
         setData(result.data);
@@ -340,6 +365,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!token) return;
     // Health check
     fetch('/api/health')
       .then(res => res.json())
@@ -536,9 +562,16 @@ export default function App() {
           try {
             const res = await fetch('/api/issues/bulk', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
               body: JSON.stringify(processedData),
             });
+            if (res.status === 401 || res.status === 403) {
+              handleLogout();
+              return;
+            }
             const result = await res.json();
             if (result.success) {
               // Reload from backend to get IDs
@@ -567,7 +600,14 @@ export default function App() {
     // Clear backend data
     if (backendStatus === 'online') {
       try {
-        await fetch('/api/issues', { method: 'DELETE' });
+        const res = await fetch('/api/issues', { 
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401 || res.status === 403) {
+          handleLogout();
+          return;
+        }
       } catch (err) {
         console.error('Failed to reset backend data:', err);
       }
@@ -576,7 +616,7 @@ export default function App() {
     setTimeout(() => setImportStatus(prev => ({ ...prev, show: false })), 3000);
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     // Build query params from current filters
     const params = new URLSearchParams();
     if (selectedMonth !== 'all') params.set('month', String(selectedMonth));
@@ -584,8 +624,32 @@ export default function App() {
     if (selectedCause !== 'all') params.set('cause', selectedCause);
     if (selectedDept !== 'all') params.set('dept', selectedDept);
     if (selectedOob !== 'all') params.set('oob', selectedOob);
-    window.open(`/api/export?${params.toString()}`, '_blank');
+    
+    try {
+      const res = await fetch(`/api/export?${params.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status === 401 || res.status === 403) {
+        handleLogout();
+        return;
+      }
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `质量数据报表_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
   };
+
+  if (!token) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background-light">
@@ -621,7 +685,7 @@ export default function App() {
           <SidebarItem icon={Settings} label={t('data')} active={activeTab === 'data'} onClick={() => setActiveTab('data')} />
         </nav>
         
-        <div className="p-4 border-t border-slate-100">
+        <div className="p-4 border-t border-slate-100 flex flex-col gap-3">
           <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg">
             <div className={cn(
               "size-2 rounded-full",
@@ -632,6 +696,10 @@ export default function App() {
               Backend: {backendStatus}
             </span>
           </div>
+          
+          <button onClick={handleLogout} className="flex justify-center items-center gap-2 py-2 mt-1 rounded-lg text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all">
+            <LogOut size={16} /> 退 出 登 录
+          </button>
         </div>
       </aside>
 

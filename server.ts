@@ -5,6 +5,8 @@ import { fileURLToPath } from "url";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import dotenv from "dotenv";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 import {
   getAllIssues,
@@ -18,6 +20,7 @@ import {
   getModelRanking,
   getCauseDistribution,
   getPerformanceData,
+  getUserByUsername,
   type QualityIssue,
   type IssueFilters,
 } from "./db.ts";
@@ -39,6 +42,56 @@ export async function startServer(portOverride?: number): Promise<number> {
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
   // ===================== API Routes =====================
+
+  const JWT_SECRET = process.env.JWT_SECRET || "quality_bi_super_secret_key";
+
+  // Authentication Middleware
+  app.use("/api", (req, res, next) => {
+    // Skip auth for health and login
+    if (req.path === "/health" || req.path === "/auth/login") {
+      return next();
+    }
+    const authHeader = req.headers["authorization"];
+    const token = authHeader && authHeader.split(" ")[1];
+    
+    if (!token) {
+      return res.status(401).json({ success: false, error: "未授权：请先登录" });
+    }
+    
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+      if (err) {
+        return res.status(403).json({ success: false, error: "登录已过期或无效" });
+      }
+      (req as any).user = user;
+      next();
+    });
+  });
+
+  /** POST /api/auth/login */
+  app.post("/api/auth/login", (req, res) => {
+    try {
+      const { username, password } = req.body;
+      if (!username || !password) {
+        return res.status(400).json({ success: false, error: "必须提供用户名和密码" });
+      }
+      
+      const user = getUserByUsername(username);
+      if (!user) {
+        return res.status(401).json({ success: false, error: "用户名或密码错误" });
+      }
+      
+      const valid = bcrypt.compareSync(password, user.password_hash);
+      if (!valid) {
+        return res.status(401).json({ success: false, error: "用户名或密码错误" });
+      }
+      
+      const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: "7d" });
+      res.json({ success: true, token, username: user.username });
+    } catch (error: any) {
+      console.error("Login error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 
   /** Health check */
   app.get("/api/health", (_req, res) => {
