@@ -114,6 +114,11 @@ export async function startServer(portOverride?: number): Promise<number> {
     res.json({ status: "ok", message: "Quality BI Backend is running", timestamp: new Date().toISOString() });
   });
 
+  /** GET /api/auth/session-status - Simple heartbeat for polling */
+  app.get("/api/auth/session-status", (_req, res) => {
+    res.json({ success: true });
+  });
+
   /** GET /api/issues — Query issues with optional filters */
   app.get("/api/issues", (req, res) => {
     try {

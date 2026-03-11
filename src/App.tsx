@@ -27,7 +27,9 @@ import {
   Users,
   Target,
   Layers,
-  LogOut
+  LogOut,
+  ShieldCheck,
+  ArrowRight
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { 
@@ -320,6 +322,7 @@ export default function App() {
   const [selectedDept, setSelectedDept] = useState<string>('all');
   const [selectedOob, setSelectedOob] = useState<string>('all');
   const [data, setData] = useState<any[]>(MOCK_DATA);
+  const [isKickedOut, setIsKickedOut] = useState(false);
   const t = (key: string) => TRANSLATIONS[lang][key] || key;
   const [importStatus, setImportStatus] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -339,7 +342,29 @@ export default function App() {
     localStorage.setItem('username', u);
     setToken(t);
     setUsername(u);
+    setIsKickedOut(false);
   };
+
+  // Session monitor
+  useEffect(() => {
+    if (!token) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/auth/session-status', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await res.json();
+        if (res.status === 401 && result.error === 'SESSION_EXPIRED_CONCURRENT') {
+          setIsKickedOut(true);
+        }
+      } catch (err) {
+        console.error('Session monitor error:', err);
+      }
+    }, 10000); // Check every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [token]);
 
   // Load data from backend on mount
   const loadDataFromBackend = async () => {
@@ -353,9 +378,10 @@ export default function App() {
       
       if (res.status === 401 || res.status === 403) {
         if (result.error === 'SESSION_EXPIRED_CONCURRENT') {
-          window.alert(result.message || '该账号已被他人登录！');
+          setIsKickedOut(true);
+        } else {
+          handleLogout();
         }
-        handleLogout();
         return;
       }
       
@@ -577,9 +603,10 @@ export default function App() {
             
             if (res.status === 401 || res.status === 403) {
               if (result.error === 'SESSION_EXPIRED_CONCURRENT') {
-                window.alert(result.message || '该账号已被他人登录！');
+                setIsKickedOut(true);
+              } else {
+                handleLogout();
               }
-              handleLogout();
               return;
             }
             
@@ -618,9 +645,10 @@ export default function App() {
         
         if (res.status === 401 || res.status === 403) {
           if (result.error === 'SESSION_EXPIRED_CONCURRENT') {
-            window.alert(result.message || '该账号已被他人登录！');
+            setIsKickedOut(true);
+          } else {
+            handleLogout();
           }
-          handleLogout();
           return;
         }
       } catch (err) {
@@ -648,9 +676,10 @@ export default function App() {
 
       if (res.status === 401 || res.status === 403) {
         if (result.error === 'SESSION_EXPIRED_CONCURRENT') {
-          window.alert(result.message || '该账号已被他人登录！');
+          setIsKickedOut(true);
+        } else {
+          handleLogout();
         }
-        handleLogout();
         return;
       }
       
@@ -677,7 +706,8 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background-light">
+    <>
+      <div className="flex bg-slate-50 min-h-screen text-slate-600 font-sans selection:bg-primary/10">
       {/* Notifications */}
       {importStatus.show && (
         <div className={cn(
@@ -1090,5 +1120,25 @@ export default function App() {
         )}
       </main>
     </div>
+
+      {isKickedOut && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-2xl p-8 max-w-sm w-full mx-4 shadow-2xl border border-slate-100 text-center animate-in zoom-in-95 duration-300">
+            <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <ShieldCheck size={32} />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 mb-2">安全提示</h2>
+            <p className="text-slate-500 mb-8 leading-relaxed">该账号已被他人登录！如果不是你本人操作，请及时修改密码。</p>
+            <button 
+              onClick={handleLogout}
+              className="w-full py-3 px-4 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 group"
+            >
+              <span>确定</span>
+              <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
