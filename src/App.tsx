@@ -1120,10 +1120,6 @@ export default function App() {
       try {
         const bstr = event.target?.result;
         const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const rawData: any[] = XLSX.utils.sheet_to_json(ws);
-
         const normalizeHeader = (value: any) => String(value || '')
           .toLowerCase()
           .replace(/[\s\r\n\t（）()\\/_-]/g, '')
@@ -1153,6 +1149,38 @@ export default function App() {
           }
           return undefined;
         };
+        const requiredGroups = {
+          period: ['日期', '年月', '月份', '日期单位年月'],
+          productLine: ['产品分类', '产品线', '分类'],
+          totalRepairRate: ['总返修率'],
+        };
+        const optionalMetricGroups = [
+          ['月度返修产品数（去除OOB）', '月度返修产品数(去除OOB)', '月度返修产品数', '月度返修产品数去除OOB'],
+          ['月度发货数'],
+          ['截止当月保内发货总数', '保内发货总数'],
+          ['月度OOB开箱不合格产品数', 'OOB开箱不合格产品数'],
+          ['月度返修率'],
+          ['月度OOB开箱不合格率'],
+        ];
+        const hasAlias = (headers: string[], aliases: string[]) => {
+          const normalizedHeaders = headers.map(normalizeHeader);
+          return aliases.some(alias => normalizedHeaders.includes(normalizeHeader(alias)));
+        };
+        const findRepairSheet = () => {
+          for (const sheetName of wb.SheetNames) {
+            const ws = wb.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as any[][];
+            for (let rowIndex = 0; rowIndex < Math.min(rows.length, 20); rowIndex++) {
+              const row = rows[rowIndex].map(cell => String(cell || ''));
+              const requiredMatched = Object.values(requiredGroups).every(group => hasAlias(row, group));
+              const optionalMatched = optionalMetricGroups.filter(group => hasAlias(row, group)).length;
+              if (requiredMatched && optionalMatched >= 2) {
+                return { sheetName, headerRowIndex: rowIndex };
+              }
+            }
+          }
+          return null;
+        };
         const normalizeProductLine = (value: any) => {
           const text = String(value || '').trim();
           if (text.includes('所有产品') || text.toLowerCase().includes('all products')) return 'all';
@@ -1180,6 +1208,15 @@ export default function App() {
           }
           return { year: 0, month: 0 };
         };
+        const repairSheet = findRepairSheet();
+        if (!repairSheet) {
+          throw new Error('repair-sheet-not-found');
+        }
+        const ws = wb.Sheets[repairSheet.sheetName];
+        const rawData: any[] = XLSX.utils.sheet_to_json(ws, {
+          range: repairSheet.headerRowIndex,
+          defval: '',
+        });
 
         const processedData = rawData
           .map(rawRow => {
