@@ -682,6 +682,8 @@ export default function App() {
     const normalizeProductLine = (value: any) => {
       const v = String(value || '').trim();
       if (!v) return 'others';
+      if (v === 'all' || v.includes('所有产品') || v.toLowerCase().includes('all products')) return 'all';
+      if (!v) return 'others';
       if (v === 'roboticArm' || v.includes('机械臂')) return 'roboticArm';
       if (v === 'robot' || v.includes('机器人')) return 'robot';
       if (v === 'joint' || v.includes('关节')) return 'joint';
@@ -702,7 +704,7 @@ export default function App() {
     const buckets = new Map<number, any>();
     const ensure = (orderKey: number, year: number, month: number) => {
       if (buckets.has(orderKey)) return buckets.get(orderKey);
-      const blank = { repairQty: 0, oobQty: 0, shipQty: 0, warrantyQty: 0, explicitRate: 0 };
+      const blank = { repairQty: 0, oobQty: 0, shipQty: 0, warrantyQty: 0, explicitRate: 0, hasExplicit: false };
       const item = {
         orderKey,
         month: monthLabel(year, month),
@@ -729,11 +731,15 @@ export default function App() {
       const warrantyQty = Number(row.warrantyShipmentCount) || 0;
       const explicitRate = Number(row.totalRepairRate) || 0;
 
-      bucket.all.repairQty += repairQty;
-      bucket.all.oobQty += oobQty;
-      bucket.all.shipQty += shipQty;
-      bucket.all.warrantyQty += warrantyQty;
-      bucket.all.explicitRate += explicitRate;
+      if (productLine === 'all') {
+        bucket.all.repairQty += repairQty;
+        bucket.all.oobQty += oobQty;
+        bucket.all.shipQty += shipQty;
+        bucket.all.warrantyQty += warrantyQty;
+        bucket.all.explicitRate += explicitRate;
+        bucket.all.hasExplicit = true;
+        return;
+      }
 
       bucket[productLine].repairQty += repairQty;
       bucket[productLine].oobQty += oobQty;
@@ -746,7 +752,15 @@ export default function App() {
       .sort((a, b) => a.orderKey - b.orderKey)
       .map((bucket) => ({
         month: bucket.month,
-        all: computeTotalRate(bucket.all.repairQty, bucket.all.warrantyQty, bucket.all.oobQty, bucket.all.shipQty, bucket.all.explicitRate),
+        all: bucket.all.hasExplicit
+          ? computeTotalRate(bucket.all.repairQty, bucket.all.warrantyQty, bucket.all.oobQty, bucket.all.shipQty, bucket.all.explicitRate)
+          : computeTotalRate(
+              bucket.roboticArm.repairQty + bucket.robot.repairQty + bucket.joint.repairQty + bucket.others.repairQty,
+              bucket.roboticArm.warrantyQty + bucket.robot.warrantyQty + bucket.joint.warrantyQty + bucket.others.warrantyQty,
+              bucket.roboticArm.oobQty + bucket.robot.oobQty + bucket.joint.oobQty + bucket.others.oobQty,
+              bucket.roboticArm.shipQty + bucket.robot.shipQty + bucket.joint.shipQty + bucket.others.shipQty,
+              bucket.roboticArm.explicitRate + bucket.robot.explicitRate + bucket.joint.explicitRate + bucket.others.explicitRate
+            ),
         roboticArm: computeTotalRate(bucket.roboticArm.repairQty, bucket.roboticArm.warrantyQty, bucket.roboticArm.oobQty, bucket.roboticArm.shipQty, bucket.roboticArm.explicitRate),
         robot: computeTotalRate(bucket.robot.repairQty, bucket.robot.warrantyQty, bucket.robot.oobQty, bucket.robot.shipQty, bucket.robot.explicitRate),
         joint: computeTotalRate(bucket.joint.repairQty, bucket.joint.warrantyQty, bucket.joint.oobQty, bucket.joint.shipQty, bucket.joint.explicitRate),
@@ -1110,6 +1124,10 @@ export default function App() {
         const ws = wb.Sheets[wsname];
         const rawData: any[] = XLSX.utils.sheet_to_json(ws);
 
+        const normalizeHeader = (value: any) => String(value || '')
+          .toLowerCase()
+          .replace(/[\s\r\n\t（）()\\/_-]/g, '')
+          .replace(/产品个数/g, '产品数');
         const parseNumber = (...values: any[]) => {
           for (const value of values) {
             if (value === undefined || value === null || value === '') continue;
@@ -1119,8 +1137,25 @@ export default function App() {
           }
           return 0;
         };
+        const buildNormalizedRow = (row: Record<string, any>) => {
+          const normalized: Record<string, any> = {};
+          Object.entries(row).forEach(([key, value]) => {
+            normalized[normalizeHeader(key)] = value;
+          });
+          return normalized;
+        };
+        const getValueByAliases = (row: Record<string, any>, aliases: string[]) => {
+          for (const alias of aliases) {
+            const normalizedAlias = normalizeHeader(alias);
+            if (normalizedAlias in row) {
+              return row[normalizedAlias];
+            }
+          }
+          return undefined;
+        };
         const normalizeProductLine = (value: any) => {
           const text = String(value || '').trim();
+          if (text.includes('所有产品') || text.toLowerCase().includes('all products')) return 'all';
           if (text.includes('机械臂')) return 'roboticArm';
           if (text.includes('机器人')) return 'robot';
           if (text.includes('关节')) return 'joint';
@@ -1128,6 +1163,12 @@ export default function App() {
           return 'others';
         };
         const parseYearMonth = (value: any) => {
+          if (typeof value === 'number') {
+            const parsed = XLSX.SSF.parse_date_code(value);
+            if (parsed) {
+              return { year: parsed.y, month: parsed.m };
+            }
+          }
           const text = String(value || '').trim();
           const match = text.match(/(\d{4})\D+(\d{1,2})/);
           if (match) {
@@ -1141,20 +1182,24 @@ export default function App() {
         };
 
         const processedData = rawData
-          .map(row => {
-            const period = parseYearMonth(row['日期'] || row['年月'] || row['月份']);
-            const repairCount = parseNumber(row['月度返修产品数（去除OOB）'], row['月度返修产品数(去除OOB)'], row['月度返修产品数']);
-            const monthShipmentCount = parseNumber(row['月度发货数']);
-            const warrantyShipmentCount = parseNumber(row['截止当月保内发货总数']);
-            const oobDefectCount = parseNumber(row['月度OOB开箱不合格产品数'], row['月度OOB开箱不合格产品数']);
-            const monthlyRepairRate = parseNumber(row['月度返修率']);
-            const monthlyOobRate = parseNumber(row['月度OOB开箱不合格率']);
-            const totalRepairRate = parseNumber(row['总返修率']) || (monthlyRepairRate * 0.4 + monthlyOobRate * 0.6);
+          .map(rawRow => {
+            const row = buildNormalizedRow(rawRow);
+            const period = parseYearMonth(getValueByAliases(row, ['日期', '年月', '月份', '日期单位年月']));
+            const repairCount = parseNumber(
+              getValueByAliases(row, ['月度返修产品数（去除OOB）', '月度返修产品数(去除OOB)', '月度返修产品数', '月度返修产品数去除OOB'])
+            );
+            const monthShipmentCount = parseNumber(getValueByAliases(row, ['月度发货数']));
+            const warrantyShipmentCount = parseNumber(getValueByAliases(row, ['截止当月保内发货总数', '保内发货总数']));
+            const oobDefectCount = parseNumber(getValueByAliases(row, ['月度OOB开箱不合格产品数', 'OOB开箱不合格产品数']));
+            const monthlyRepairRate = parseNumber(getValueByAliases(row, ['月度返修率']));
+            const monthlyOobRate = parseNumber(getValueByAliases(row, ['月度OOB开箱不合格率', '月度OOB开箱不合格率']));
+            const totalRepairRate = parseNumber(getValueByAliases(row, ['总返修率'])) || (monthlyRepairRate * 0.4 + monthlyOobRate * 0.6);
+            const productLine = normalizeProductLine(getValueByAliases(row, ['产品分类', '产品线', '分类']));
 
             return {
               year: period.year,
               month: period.month,
-              productLine: normalizeProductLine(row['产品分类'] || row['产品线']),
+              productLine,
               repairCount,
               monthShipmentCount,
               warrantyShipmentCount,
