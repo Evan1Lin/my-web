@@ -72,6 +72,31 @@ try { db.exec("ALTER TABLE quality_issues ADD COLUMN snDate TEXT NOT NULL DEFAUL
 try { db.exec("ALTER TABLE quality_issues ADD COLUMN analysisType TEXT NOT NULL DEFAULT '';"); } catch (e) {}
 try { db.exec("ALTER TABLE quality_issues ADD COLUMN closedQuantity INTEGER NOT NULL DEFAULT 0;"); } catch (e) {}
 
+try {
+  db.exec(`
+    UPDATE quality_issues
+    SET year = CAST(SUBSTR(complaintDate, 1, 4) AS INTEGER)
+    WHERE (year IS NULL OR year = 0)
+      AND complaintDate GLOB '____年*';
+  `);
+} catch (e) {}
+try {
+  db.exec(`
+    UPDATE quality_issues
+    SET year = CAST(SUBSTR(complaintDate, 1, 4) AS INTEGER)
+    WHERE (year IS NULL OR year = 0)
+      AND complaintDate GLOB '____-__-__*';
+  `);
+} catch (e) {}
+try {
+  db.exec(`
+    UPDATE quality_issues
+    SET year = CAST(SUBSTR(createdAt, 1, 4) AS INTEGER)
+    WHERE (year IS NULL OR year = 0)
+      AND createdAt GLOB '____-__-__*';
+  `);
+} catch (e) {}
+
 // --- Initialize default user ---
 const userCount = db.prepare("SELECT COUNT(*) as count FROM auth_users").get() as any;
 if (userCount.count === 0) {

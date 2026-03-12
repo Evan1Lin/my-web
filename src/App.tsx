@@ -123,6 +123,7 @@ const TRANSLATIONS: Record<string, any> = {
     overview: '总览',
     trend: '趋势分析',
     production: '生产看板',
+    repairDashboard: '返修率看板',
     performance: '绩效看板',
     data: '详细数据',
     importExcel: '导入表格',
@@ -132,6 +133,9 @@ const TRANSLATIONS: Record<string, any> = {
     monthlyIssues: '月度问题总数',
     oobRate: 'OOB 合规率',
     repairRate: '累计返修率',
+    allProducts: '所有产品',
+    totalRepairRate: '总返修率',
+    repairDashboardTitle: '按产品分类统计返修率趋势',
     closeRate: '问题关闭率',
     overdue: '逾期未闭环',
     target: '目标',
@@ -222,6 +226,7 @@ const TRANSLATIONS: Record<string, any> = {
     overview: 'Overview',
     trend: 'Trend Analysis',
     production: 'Production Dashboard',
+    repairDashboard: 'Repair Rate Dashboard',
     performance: 'Performance Dashboard',
     data: 'Detailed Data',
     importExcel: 'Import Excel',
@@ -231,6 +236,9 @@ const TRANSLATIONS: Record<string, any> = {
     monthlyIssues: 'Monthly Total Issues',
     oobRate: 'OOB Compliance Rate',
     repairRate: 'Total Repair Rate',
+    allProducts: 'All Products',
+    totalRepairRate: 'Total Repair Rate',
+    repairDashboardTitle: 'Repair Rate Trend by Product Line',
     closeRate: 'Issue Close Rate',
     overdue: 'Overdue Unclosed',
     target: 'Target',
@@ -539,10 +547,10 @@ export default function App() {
     const currData = filterByYearMonth(data, selectedYear, selectedMonth);
     
     // Calculate current metrics
-    const currTotalIssues = currData.reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
-    const currOobIssues = currData.filter(d => (d.oob || 0) >= 1).reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
-    const currClosedIssues = currData.filter(d => d.closed === 1).reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
-    const currOverdue = currData.filter(d => d.closed === 0).reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
+    const currTotalIssues = currData.length;
+    const currOobIssues = currData.filter(d => (d.oob || 0) >= 1).length;
+    const currClosedIssues = currData.filter(d => d.closed === 1).length;
+    const currOverdue = currData.filter(d => d.closed === 0).length;
     
     const currOobRate = currTotalIssues > 0 ? (currOobIssues / currTotalIssues) * 100 : 0;
     const currCloseRate = currTotalIssues > 0 ? (currClosedIssues / currTotalIssues) * 100 : 0;
@@ -558,10 +566,10 @@ export default function App() {
       prevData = filterByYearMonth(data, prevYear, prevMonth);
     }
 
-    const prevTotalIssues = prevData.reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
-    const prevOobIssues = prevData.filter(d => (d.oob || 0) >= 1).reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
-    const prevClosedIssues = prevData.filter(d => d.closed === 1).reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
-    const prevOverdue = prevData.filter(d => d.closed === 0).reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
+    const prevTotalIssues = prevData.length;
+    const prevOobIssues = prevData.filter(d => (d.oob || 0) >= 1).length;
+    const prevClosedIssues = prevData.filter(d => d.closed === 1).length;
+    const prevOverdue = prevData.filter(d => d.closed === 0).length;
 
     const prevOobRate = prevTotalIssues > 0 ? (prevOobIssues / prevTotalIssues) * 100 : 0;
     const prevCloseRate = prevTotalIssues > 0 ? (prevClosedIssues / prevTotalIssues) * 100 : 0;
@@ -601,8 +609,8 @@ export default function App() {
         return matchYear && matchMonth && matchProductLine && matchCause && matchDept && matchOob;
       });
       
-      const totalIssues = monthData.reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
-      const closedIssues = monthData.filter(d => d.closed === 1).reduce((acc, d) => acc + (d.issueQuantity || 0), 0);
+      const totalIssues = monthData.length;
+      const closedIssues = monthData.filter(d => d.closed === 1).length;
       const closeRate = totalIssues > 0 ? (closedIssues / totalIssues) * 100 : 0;
       
       return {
@@ -613,6 +621,76 @@ export default function App() {
       };
     });
   }, [data, selectedYear, selectedProductLine, selectedCause, selectedDept, selectedOob, lang]);
+
+  const repairRateTrendByMonth = useMemo(() => {
+    const normalizeProductLine = (value: any) => {
+      const v = String(value || '').trim();
+      if (!v) return 'others';
+      if (v === 'roboticArm' || v.includes('机械臂')) return 'roboticArm';
+      if (v === 'robot' || v.includes('机器人')) return 'robot';
+      if (v === 'joint' || v.includes('关节')) return 'joint';
+      if (v === 'others' || v.includes('其他')) return 'others';
+      return 'others';
+    };
+
+    const keyToOrder = (year: number, month: number) => year * 100 + month;
+    const computeTotalRate = (repairQty: number, oobQty: number, shipQty: number) => {
+      if (!shipQty || shipQty <= 0) return 0;
+      return (0.4 * (repairQty / shipQty) + 0.6 * (oobQty / shipQty)) * 100;
+    };
+
+    const buckets = new Map<number, any>();
+    const ensure = (orderKey: number, year: number, month: number) => {
+      if (buckets.has(orderKey)) return buckets.get(orderKey);
+      const item = {
+        orderKey,
+        month: `${year}年${month}月`,
+        all: { repairQty: 0, oobQty: 0, shipQty: 0 },
+        roboticArm: { repairQty: 0, oobQty: 0, shipQty: 0 },
+        robot: { repairQty: 0, oobQty: 0, shipQty: 0 },
+        joint: { repairQty: 0, oobQty: 0, shipQty: 0 },
+        others: { repairQty: 0, oobQty: 0, shipQty: 0 },
+      };
+      buckets.set(orderKey, item);
+      return item;
+    };
+
+    for (const row of data as any[]) {
+      const year = Number((row as any).year) || 0;
+      const month = Number((row as any).month) || 0;
+      if (year <= 0 || month < 1 || month > 12) continue;
+
+      const orderKey = keyToOrder(year, month);
+      const bucket = ensure(orderKey, year, month);
+
+      const productLine = normalizeProductLine((row as any).productLine);
+      const shipQty = Number((row as any).productQuantity) || 0;
+      const issueQty = Number((row as any).issueQuantity) || 0;
+      const isOob = Number((row as any).oob) >= 1;
+
+      bucket.all.shipQty += shipQty;
+      bucket[productLine].shipQty += shipQty;
+
+      if (isOob) {
+        bucket.all.oobQty += issueQty;
+        bucket[productLine].oobQty += issueQty;
+      } else {
+        bucket.all.repairQty += issueQty;
+        bucket[productLine].repairQty += issueQty;
+      }
+    }
+
+    return Array.from(buckets.values())
+      .sort((a, b) => a.orderKey - b.orderKey)
+      .map((b) => ({
+        month: b.month,
+        all: computeTotalRate(b.all.repairQty, b.all.oobQty, b.all.shipQty),
+        roboticArm: computeTotalRate(b.roboticArm.repairQty, b.roboticArm.oobQty, b.roboticArm.shipQty),
+        robot: computeTotalRate(b.robot.repairQty, b.robot.oobQty, b.robot.shipQty),
+        joint: computeTotalRate(b.joint.repairQty, b.joint.oobQty, b.joint.shipQty),
+        others: computeTotalRate(b.others.repairQty, b.others.oobQty, b.others.shipQty),
+      }));
+  }, [data]);
 
   const dynamicPerformanceData = useMemo(() => {
     const creators: Record<string, { task: number, speed: number }> = {};
@@ -769,6 +847,13 @@ export default function App() {
 
         // Update frontend state immediately
         setData(prev => [...prev, ...processedData]);
+        if (selectedYear === 'all') {
+          const years = processedData.map((d: any) => d.year).filter((y: any) => typeof y === 'number' && y > 0) as number[];
+          if (years.length > 0) {
+            setSelectedYear(Math.max(...years));
+            setSelectedMonth('all');
+          }
+        }
 
         // Persist to backend
         if (backendStatus === 'online') {
@@ -920,7 +1005,7 @@ export default function App() {
         <nav className="flex-1 px-4 space-y-1">
           <SidebarItem icon={LayoutDashboard} label={t('overview')} active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
           <SidebarItem icon={TrendingUp} label={t('trend')} active={activeTab === 'trend'} onClick={() => setActiveTab('trend')} />
-          <SidebarItem icon={Factory} label={t('production')} active={activeTab === 'production'} onClick={() => setActiveTab('production')} />
+          <SidebarItem icon={Factory} label={t('repairDashboard')} active={activeTab === 'repair'} onClick={() => setActiveTab('repair')} />
           <SidebarItem icon={Settings} label={t('data')} active={activeTab === 'data'} onClick={() => setActiveTab('data')} />
         </nav>
         
@@ -963,7 +1048,7 @@ export default function App() {
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
               {activeTab === 'overview' && t('title')}
               {activeTab === 'trend' && t('trend')}
-              {activeTab === 'production' && t('production')}
+              {activeTab === 'repair' && t('repairDashboard')}
               {activeTab === 'data' && t('data')}
             </h1>
             <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-medium">{t('subtitle')}</p>
@@ -1225,60 +1310,32 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'production' && (
+        {activeTab === 'repair' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-              <div className="apple-card p-4 bg-slate-900 text-white">
-                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{t('prodAbnormal')}</p>
-                <h2 className="text-4xl font-bold mt-2">37</h2>
-                <div className="mt-4 flex items-center gap-2 text-[10px] text-slate-400">
-                  <Layers size={12} /> {t('coverage')} {new Set(filteredData.map(d => d.model)).size} {t('models')}
-                </div>
-              </div>
-              <div className="apple-card p-4">
-                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{t('highFreq')}</p>
-                <h2 className="text-2xl font-bold mt-2 text-slate-900">{modelRanking[0]?.name || '-'}</h2>
-                <p className="text-[10px] text-rose-500 mt-1 font-bold">{t('issueCount')}: {modelRanking[0]?.count || 0}</p>
-              </div>
-              <div className="apple-card p-4">
-                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{t('mainCause')}</p>
-                <h2 className="text-2xl font-bold mt-2 text-slate-900">{causeDistribution[0]?.name || '-'}</h2>
-                <p className="text-[10px] text-amber-600 mt-1 font-bold">{t('ratio')}: {filteredData.length > 0 ? ((causeDistribution[0]?.value / filteredData.reduce((acc, d) => acc + d.issueQuantity, 0)) * 100).toFixed(1) : 0}%</p>
-              </div>
-              <div className="apple-card p-4">
-                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{t('prodAssembly')}</p>
-                <h2 className="text-2xl font-bold mt-2 text-slate-900">{filteredData.filter(d => d.cause === t('assembly') || d.cause === '生产装配与工艺类原因').length} {t('cases')}</h2>
-                <p className="text-[10px] text-emerald-600 mt-1 font-bold">{t('closed')}: {filteredData.filter(d => d.cause === t('assembly') || d.cause === '生产装配与工艺类原因').length > 0 ? (filteredData.filter(d => (d.cause === t('assembly') || d.cause === '生产装配与工艺类原因') && d.closed === 1).length / filteredData.filter(d => d.cause === t('assembly') || d.cause === '生产装配与工艺类原因').length * 100).toFixed(0) : 100}%</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="apple-card p-6">
-                <h3 className="text-sm font-semibold text-slate-900 mb-6">{t('modelDist')}</h3>
-                <div className="h-80 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={modelRanking} layout="vertical" margin={{ left: 40 }}>
-                      <XAxis type="number" hide />
-                      <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} width={100} />
-                      <Tooltip />
-                      <Bar dataKey="count" fill="#0f172a" radius={[0, 4, 4, 0]} barSize={20} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-              <div className="apple-card p-6">
-                <h3 className="text-sm font-semibold text-slate-900 mb-6">{t('causeDepth')}</h3>
-                <div className="space-y-4">
-                  {causeDistribution.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-4">
-                      <div className="w-24 text-[10px] text-slate-500 font-medium truncate">{item.name}</div>
-                      <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${(item.value / 10) * 100}%`, backgroundColor: item.color }} />
-                      </div>
-                      <div className="w-8 text-[10px] font-bold text-slate-900">{item.value}</div>
-                    </div>
-                  ))}
-                </div>
+            <div className="apple-card p-6">
+              <h3 className="text-sm font-semibold text-slate-900 mb-6 flex items-center gap-2">
+                <PieChart size={16} className="text-primary" /> {t('repairDashboardTitle')}
+              </h3>
+              <div className="h-96 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={repairRateTrendByMonth}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      tickFormatter={(v) => `${Number(v).toFixed(2)}%`}
+                    />
+                    <Tooltip formatter={(v: any) => `${Number(v).toFixed(3)}%`} />
+                    <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                    <Line type="monotone" dataKey="all" stroke="#0f172a" strokeWidth={2.5} dot={false} name={t('allProducts')} />
+                    <Line type="monotone" dataKey="others" stroke="#f97316" strokeWidth={2} dot={false} name={t('others')} />
+                    <Line type="monotone" dataKey="robot" stroke="#2563eb" strokeWidth={2} dot={false} name={t('robot')} />
+                    <Line type="monotone" dataKey="roboticArm" stroke="#a855f7" strokeWidth={2} dot={false} name={t('roboticArm')} />
+                    <Line type="monotone" dataKey="joint" stroke="#0ea5e9" strokeWidth={2} dot={false} name={t('joint')} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </div>
