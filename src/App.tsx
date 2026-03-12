@@ -142,6 +142,13 @@ const TRANSLATIONS: Record<string, any> = {
     clearRepairData: '清空返修率表',
     repairMonth: '日期',
     repairUploadSuccess: '返修率表导入成功',
+    oobModuleTitle: 'OOB 看板',
+    oobModuleHint: '基于总表中的 OOB 字段、产品线、主责部门与初筛主责部门统计趋势。',
+    oobRateBoardTitle: '按产品分类统计 OOB 不合格率',
+    oobCountBoardTitle: '按产品分类统计 OOB 问题产品数量分布',
+    mainDeptOobTitle: '主责部门看板 OOB 产品趋势',
+    initialDeptOobTitle: '初筛主责部门看板 OOB 产品趋势',
+    oobDashboardEmpty: '请先导入包含 OOB 信息的总表数据',
     closeRate: '问题关闭率',
     overdue: '逾期未闭环',
     target: '目标',
@@ -251,6 +258,13 @@ const TRANSLATIONS: Record<string, any> = {
     clearRepairData: 'Clear Repair Data',
     repairMonth: 'Period',
     repairUploadSuccess: 'Repair-rate Excel imported successfully',
+    oobModuleTitle: 'OOB Dashboards',
+    oobModuleHint: 'Built from the issue sheet OOB flag, product line, main department, and initial department fields.',
+    oobRateBoardTitle: 'OOB Defect Rate by Product Line',
+    oobCountBoardTitle: 'OOB Product Count by Product Line',
+    mainDeptOobTitle: 'Main Department OOB Trend',
+    initialDeptOobTitle: 'Initial Department OOB Trend',
+    oobDashboardEmpty: 'Import issue data with OOB fields first',
     closeRate: 'Issue Close Rate',
     overdue: 'Overdue Unclosed',
     target: 'Target',
@@ -737,6 +751,143 @@ export default function App() {
         others: computeTotalRate(bucket.others.repairQty, bucket.others.warrantyQty, bucket.others.oobQty, bucket.others.shipQty, bucket.others.explicitRate),
       }));
   }, [repairData, lang]);
+
+  const oobDashboard = useMemo(() => {
+    const normalizeProductLine = (value: any) => {
+      const v = String(value || '').trim();
+      if (!v) return 'others';
+      if (v === 'roboticArm' || v.includes('机械臂')) return 'roboticArm';
+      if (v === 'robot' || v.includes('机器人')) return 'robot';
+      if (v === 'joint' || v.includes('关节')) return 'joint';
+      if (v === 'others' || v.includes('其他')) return 'others';
+      return 'others';
+    };
+    const monthLabel = (year: number, month: number) => lang === '中'
+      ? `${year}年${month}月`
+      : `${year}-${String(month).padStart(2, '0')}`;
+    const sortedPeriods = Array.from(
+      new Set(
+        data
+          .map((row: any) => {
+            const year = Number(row.year) || 0;
+            const month = Number(row.month) || 0;
+            if (year <= 0 || month < 1 || month > 12) return '';
+            return `${year}-${String(month).padStart(2, '0')}`;
+          })
+          .filter(Boolean)
+      )
+    ) as string[];
+    sortedPeriods.sort();
+
+    const rateMap = new Map<string, any>();
+    const countMap = new Map<string, any>();
+    const ensureBaseRow = (map: Map<string, any>, periodKey: string, label: string) => {
+      if (!map.has(periodKey)) {
+        map.set(periodKey, {
+          month: label,
+          all: 0,
+          roboticArm: 0,
+          robot: 0,
+          joint: 0,
+          others: 0,
+          allShipment: 0,
+          roboticArmShipment: 0,
+          robotShipment: 0,
+          jointShipment: 0,
+          othersShipment: 0,
+        });
+      }
+      return map.get(periodKey);
+    };
+
+    const mainDeptTotals: Record<string, number> = {};
+    const initialDeptTotals: Record<string, number> = {};
+
+    data.forEach((row: any) => {
+      const year = Number(row.year) || 0;
+      const month = Number(row.month) || 0;
+      if (year <= 0 || month < 1 || month > 12 || Number(row.oob) < 1) return;
+
+      const periodKey = `${year}-${String(month).padStart(2, '0')}`;
+      const periodLabel = monthLabel(year, month);
+      const productLine = normalizeProductLine(row.productLine);
+      const quantity = Number(row.issueQuantity) || 0;
+      const shipment = Number(row.productQuantity) || 0;
+
+      const rateRow = ensureBaseRow(rateMap, periodKey, periodLabel);
+      const countRow = ensureBaseRow(countMap, periodKey, periodLabel);
+
+      rateRow[productLine] += quantity;
+      rateRow.all += quantity;
+      rateRow[`${productLine}Shipment`] += shipment;
+      rateRow.allShipment += shipment;
+
+      countRow[productLine] += quantity;
+      countRow.all += quantity;
+
+      const mainDept = String(row.mainDept || row.dept || '').trim() || '未指定';
+      const initialDept = String(row.initialDept || '').trim() || '未指定';
+      mainDeptTotals[mainDept] = (mainDeptTotals[mainDept] || 0) + quantity;
+      initialDeptTotals[initialDept] = (initialDeptTotals[initialDept] || 0) + quantity;
+    });
+
+    const buildSeriesRows = (totals: Record<string, number>, field: 'mainDept' | 'initialDept') => {
+      const topDepartments = Object.entries(totals)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([name]) => name);
+
+      return sortedPeriods.map((periodKey) => {
+        const [year, month] = periodKey.split('-').map(Number);
+        const row: Record<string, any> = { month: monthLabel(year, month) };
+        topDepartments.forEach((dept) => {
+          row[dept] = 0;
+        });
+
+        data.forEach((item: any) => {
+          if (Number(item.oob) < 1) return;
+          const itemYear = Number(item.year) || 0;
+          const itemMonth = Number(item.month) || 0;
+          const itemPeriod = `${itemYear}-${String(itemMonth).padStart(2, '0')}`;
+          if (itemPeriod !== periodKey) return;
+
+          const deptName = String(field === 'mainDept' ? (item.mainDept || item.dept || '') : (item.initialDept || '')).trim() || '未指定';
+          if (!topDepartments.includes(deptName)) return;
+          row[deptName] += Number(item.issueQuantity) || 0;
+        });
+
+        return row;
+      });
+    };
+
+    const rateTrend = sortedPeriods.map((periodKey) => {
+      const [year, month] = periodKey.split('-').map(Number);
+      const row = rateMap.get(periodKey) || ensureBaseRow(rateMap, periodKey, monthLabel(year, month));
+      return {
+        month: row.month,
+        all: row.allShipment > 0 ? (row.all / row.allShipment) * 100 : 0,
+        roboticArm: row.roboticArmShipment > 0 ? (row.roboticArm / row.roboticArmShipment) * 100 : 0,
+        robot: row.robotShipment > 0 ? (row.robot / row.robotShipment) * 100 : 0,
+        joint: row.jointShipment > 0 ? (row.joint / row.jointShipment) * 100 : 0,
+        others: row.othersShipment > 0 ? (row.others / row.othersShipment) * 100 : 0,
+      };
+    });
+
+    const countTrend = sortedPeriods.map((periodKey) => {
+      const [year, month] = periodKey.split('-').map(Number);
+      return countMap.get(periodKey) || ensureBaseRow(countMap, periodKey, monthLabel(year, month));
+    });
+
+    return {
+      hasData: sortedPeriods.length > 0,
+      rateTrend,
+      countTrend,
+      mainDeptTrend: buildSeriesRows(mainDeptTotals, 'mainDept'),
+      initialDeptTrend: buildSeriesRows(initialDeptTotals, 'initialDept'),
+      mainDepartments: Object.entries(mainDeptTotals).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name]) => name),
+      initialDepartments: Object.entries(initialDeptTotals).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name]) => name),
+    };
+  }, [data, lang]);
 
   const dynamicPerformanceData = useMemo(() => {
     const creators: Record<string, { task: number, speed: number }> = {};
@@ -1534,6 +1685,95 @@ export default function App() {
                   </div>
                 )}
               </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">{t('oobModuleTitle')}</h3>
+                <p className="text-xs text-slate-500 mt-1">{t('oobModuleHint')}</p>
+              </div>
+
+              {oobDashboard.hasData ? (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  <div className="apple-card p-6">
+                    <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('oobRateBoardTitle')}</h4>
+                    <div className="h-80 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={oobDashboard.rateTrend}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(v) => `${Number(v).toFixed(2)}%`} />
+                          <Tooltip formatter={(v: any) => `${Number(v).toFixed(3)}%`} />
+                          <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                          <Line type="monotone" dataKey="all" stroke="#0f172a" strokeWidth={2.5} dot={false} name={t('allProducts')} />
+                          <Line type="monotone" dataKey="others" stroke="#f97316" strokeWidth={2} dot={false} name={t('others')} />
+                          <Line type="monotone" dataKey="robot" stroke="#2563eb" strokeWidth={2} dot={false} name={t('robot')} />
+                          <Line type="monotone" dataKey="roboticArm" stroke="#a855f7" strokeWidth={2} dot={false} name={t('roboticArm')} />
+                          <Line type="monotone" dataKey="joint" stroke="#0ea5e9" strokeWidth={2} dot={false} name={t('joint')} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="apple-card p-6">
+                    <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('oobCountBoardTitle')}</h4>
+                    <div className="h-80 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={oobDashboard.countTrend}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                          <Tooltip />
+                          <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                          <Line type="monotone" dataKey="all" stroke="#0f172a" strokeWidth={2.5} dot={false} name={t('allProducts')} />
+                          <Line type="monotone" dataKey="others" stroke="#f97316" strokeWidth={2} dot={false} name={t('others')} />
+                          <Line type="monotone" dataKey="robot" stroke="#2563eb" strokeWidth={2} dot={false} name={t('robot')} />
+                          <Line type="monotone" dataKey="roboticArm" stroke="#a855f7" strokeWidth={2} dot={false} name={t('roboticArm')} />
+                          <Line type="monotone" dataKey="joint" stroke="#0ea5e9" strokeWidth={2} dot={false} name={t('joint')} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="apple-card p-6">
+                    <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('mainDeptOobTitle')}</h4>
+                    <div className="h-80 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={oobDashboard.mainDeptTrend}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                          <Tooltip />
+                          <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                          {oobDashboard.mainDepartments.map((dept, idx) => (
+                            <Line key={dept} type="monotone" dataKey={dept} stroke={['#0f172a', '#2563eb', '#f97316', '#a855f7', '#0ea5e9', '#16a34a'][idx % 6]} strokeWidth={2} dot={false} name={dept} />
+                          ))}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="apple-card p-6">
+                    <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('initialDeptOobTitle')}</h4>
+                    <div className="h-80 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={oobDashboard.initialDeptTrend}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                          <Tooltip />
+                          <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                          {oobDashboard.initialDepartments.map((dept, idx) => (
+                            <Line key={dept} type="monotone" dataKey={dept} stroke={['#0f172a', '#2563eb', '#f97316', '#a855f7', '#0ea5e9', '#16a34a'][idx % 6]} strokeWidth={2} dot={false} name={dept} />
+                          ))}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="apple-card p-6 text-sm text-slate-400">{t('oobDashboardEmpty')}</div>
+              )}
             </div>
           </div>
         )}
