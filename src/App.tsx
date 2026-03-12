@@ -124,6 +124,7 @@ const TRANSLATIONS: Record<string, any> = {
     trend: '趋势分析',
     production: '生产看板',
     repairDashboard: '返修率看板',
+    oobDashboard: 'OOB看板',
     performance: '绩效看板',
     data: '详细数据',
     importExcel: '导入表格',
@@ -240,6 +241,7 @@ const TRANSLATIONS: Record<string, any> = {
     trend: 'Trend Analysis',
     production: 'Production Dashboard',
     repairDashboard: 'Repair Rate Dashboard',
+    oobDashboard: 'OOB Dashboard',
     performance: 'Performance Dashboard',
     data: 'Detailed Data',
     importExcel: 'Import Excel',
@@ -1323,6 +1325,7 @@ export default function App() {
           <SidebarItem icon={LayoutDashboard} label={t('overview')} active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
           <SidebarItem icon={TrendingUp} label={t('trend')} active={activeTab === 'trend'} onClick={() => setActiveTab('trend')} />
           <SidebarItem icon={Factory} label={t('repairDashboard')} active={activeTab === 'repair'} onClick={() => setActiveTab('repair')} />
+          <SidebarItem icon={BellRing} label={t('oobDashboard')} active={activeTab === 'oob'} onClick={() => setActiveTab('oob')} />
           <SidebarItem icon={Settings} label={t('data')} active={activeTab === 'data'} onClick={() => setActiveTab('data')} />
         </nav>
         
@@ -1366,6 +1369,7 @@ export default function App() {
               {activeTab === 'overview' && t('title')}
               {activeTab === 'trend' && t('trend')}
               {activeTab === 'repair' && t('repairDashboard')}
+              {activeTab === 'oob' && t('oobDashboard')}
               {activeTab === 'data' && t('data')}
             </h1>
             <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-medium">{t('subtitle')}</p>
@@ -1687,94 +1691,97 @@ export default function App() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">{t('oobModuleTitle')}</h3>
-                <p className="text-xs text-slate-500 mt-1">{t('oobModuleHint')}</p>
-              </div>
+          </div>
+        )}
 
-              {oobDashboard.hasData ? (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  <div className="apple-card p-6">
-                    <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('oobRateBoardTitle')}</h4>
-                    <div className="h-80 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={oobDashboard.rateTrend}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(v) => `${Number(v).toFixed(2)}%`} />
-                          <Tooltip formatter={(v: any) => `${Number(v).toFixed(3)}%`} />
-                          <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
-                          <Line type="monotone" dataKey="all" stroke="#0f172a" strokeWidth={2.5} dot={false} name={t('allProducts')} />
-                          <Line type="monotone" dataKey="others" stroke="#f97316" strokeWidth={2} dot={false} name={t('others')} />
-                          <Line type="monotone" dataKey="robot" stroke="#2563eb" strokeWidth={2} dot={false} name={t('robot')} />
-                          <Line type="monotone" dataKey="roboticArm" stroke="#a855f7" strokeWidth={2} dot={false} name={t('roboticArm')} />
-                          <Line type="monotone" dataKey="joint" stroke="#0ea5e9" strokeWidth={2} dot={false} name={t('joint')} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
+        {activeTab === 'oob' && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">{t('oobModuleTitle')}</h3>
+              <p className="text-xs text-slate-500 mt-1">{t('oobModuleHint')}</p>
+            </div>
 
-                  <div className="apple-card p-6">
-                    <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('oobCountBoardTitle')}</h4>
-                    <div className="h-80 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={oobDashboard.countTrend}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                          <Tooltip />
-                          <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
-                          <Line type="monotone" dataKey="all" stroke="#0f172a" strokeWidth={2.5} dot={false} name={t('allProducts')} />
-                          <Line type="monotone" dataKey="others" stroke="#f97316" strokeWidth={2} dot={false} name={t('others')} />
-                          <Line type="monotone" dataKey="robot" stroke="#2563eb" strokeWidth={2} dot={false} name={t('robot')} />
-                          <Line type="monotone" dataKey="roboticArm" stroke="#a855f7" strokeWidth={2} dot={false} name={t('roboticArm')} />
-                          <Line type="monotone" dataKey="joint" stroke="#0ea5e9" strokeWidth={2} dot={false} name={t('joint')} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  <div className="apple-card p-6">
-                    <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('mainDeptOobTitle')}</h4>
-                    <div className="h-80 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={oobDashboard.mainDeptTrend}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                          <Tooltip />
-                          <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
-                          {oobDashboard.mainDepartments.map((dept, idx) => (
-                            <Line key={dept} type="monotone" dataKey={dept} stroke={['#0f172a', '#2563eb', '#f97316', '#a855f7', '#0ea5e9', '#16a34a'][idx % 6]} strokeWidth={2} dot={false} name={dept} />
-                          ))}
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  <div className="apple-card p-6">
-                    <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('initialDeptOobTitle')}</h4>
-                    <div className="h-80 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={oobDashboard.initialDeptTrend}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                          <Tooltip />
-                          <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
-                          {oobDashboard.initialDepartments.map((dept, idx) => (
-                            <Line key={dept} type="monotone" dataKey={dept} stroke={['#0f172a', '#2563eb', '#f97316', '#a855f7', '#0ea5e9', '#16a34a'][idx % 6]} strokeWidth={2} dot={false} name={dept} />
-                          ))}
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
+            {oobDashboard.hasData ? (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="apple-card p-6">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('oobRateBoardTitle')}</h4>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={oobDashboard.rateTrend}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(v) => `${Number(v).toFixed(2)}%`} />
+                        <Tooltip formatter={(v: any) => `${Number(v).toFixed(3)}%`} />
+                        <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                        <Line type="monotone" dataKey="all" stroke="#0f172a" strokeWidth={2.5} dot={false} name={t('allProducts')} />
+                        <Line type="monotone" dataKey="others" stroke="#f97316" strokeWidth={2} dot={false} name={t('others')} />
+                        <Line type="monotone" dataKey="robot" stroke="#2563eb" strokeWidth={2} dot={false} name={t('robot')} />
+                        <Line type="monotone" dataKey="roboticArm" stroke="#a855f7" strokeWidth={2} dot={false} name={t('roboticArm')} />
+                        <Line type="monotone" dataKey="joint" stroke="#0ea5e9" strokeWidth={2} dot={false} name={t('joint')} />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
-              ) : (
-                <div className="apple-card p-6 text-sm text-slate-400">{t('oobDashboardEmpty')}</div>
-              )}
-            </div>
+
+                <div className="apple-card p-6">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('oobCountBoardTitle')}</h4>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={oobDashboard.countTrend}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <Tooltip />
+                        <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                        <Line type="monotone" dataKey="all" stroke="#0f172a" strokeWidth={2.5} dot={false} name={t('allProducts')} />
+                        <Line type="monotone" dataKey="others" stroke="#f97316" strokeWidth={2} dot={false} name={t('others')} />
+                        <Line type="monotone" dataKey="robot" stroke="#2563eb" strokeWidth={2} dot={false} name={t('robot')} />
+                        <Line type="monotone" dataKey="roboticArm" stroke="#a855f7" strokeWidth={2} dot={false} name={t('roboticArm')} />
+                        <Line type="monotone" dataKey="joint" stroke="#0ea5e9" strokeWidth={2} dot={false} name={t('joint')} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="apple-card p-6">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('mainDeptOobTitle')}</h4>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={oobDashboard.mainDeptTrend}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <Tooltip />
+                        <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                        {oobDashboard.mainDepartments.map((dept, idx) => (
+                          <Line key={dept} type="monotone" dataKey={dept} stroke={['#0f172a', '#2563eb', '#f97316', '#a855f7', '#0ea5e9', '#16a34a'][idx % 6]} strokeWidth={2} dot={false} name={dept} />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="apple-card p-6">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('initialDeptOobTitle')}</h4>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={oobDashboard.initialDeptTrend}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <Tooltip />
+                        <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                        {oobDashboard.initialDepartments.map((dept, idx) => (
+                          <Line key={dept} type="monotone" dataKey={dept} stroke={['#0f172a', '#2563eb', '#f97316', '#a855f7', '#0ea5e9', '#16a34a'][idx % 6]} strokeWidth={2} dot={false} name={dept} />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="apple-card p-6 text-sm text-slate-400">{t('oobDashboardEmpty')}</div>
+            )}
           </div>
         )}
 
