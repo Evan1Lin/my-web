@@ -62,6 +62,26 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_issues_closed ON quality_issues(closed);
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS repair_rate_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    year INTEGER NOT NULL,
+    month INTEGER NOT NULL CHECK(month >= 1 AND month <= 12),
+    productLine TEXT NOT NULL DEFAULT 'others',
+    repairCount REAL NOT NULL DEFAULT 0,
+    monthShipmentCount REAL NOT NULL DEFAULT 0,
+    warrantyShipmentCount REAL NOT NULL DEFAULT 0,
+    oobDefectCount REAL NOT NULL DEFAULT 0,
+    monthlyRepairRate REAL NOT NULL DEFAULT 0,
+    monthlyOobRate REAL NOT NULL DEFAULT 0,
+    totalRepairRate REAL NOT NULL DEFAULT 0,
+    createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_repair_rate_year_month ON repair_rate_entries(year, month);
+  CREATE INDEX IF NOT EXISTS idx_repair_rate_productLine ON repair_rate_entries(productLine);
+`);
+
 try { db.exec("ALTER TABLE quality_issues ADD COLUMN year INTEGER NOT NULL DEFAULT 0;"); } catch (e) {}
 try { db.exec("ALTER TABLE quality_issues ADD COLUMN productQuantity INTEGER NOT NULL DEFAULT 0;"); } catch (e) {}
 try { db.exec("ALTER TABLE quality_issues ADD COLUMN productModelPath TEXT NOT NULL DEFAULT '';"); } catch (e) {}
@@ -140,6 +160,21 @@ export interface IssueFilters {
   search?: string;
 }
 
+export interface RepairRateEntry {
+  id?: number;
+  year: number;
+  month: number;
+  productLine: string;
+  repairCount: number;
+  monthShipmentCount: number;
+  warrantyShipmentCount: number;
+  oobDefectCount: number;
+  monthlyRepairRate: number;
+  monthlyOobRate: number;
+  totalRepairRate: number;
+  createdAt?: string;
+}
+
 // --- Query Helpers ---
 function buildWhereClause(filters: IssueFilters) {
   const conditions: string[] = [];
@@ -199,6 +234,15 @@ export function getAllIssues(filters: IssueFilters = {}): QualityIssue[] {
   const { where, params } = buildWhereClause(filters);
   const stmt = db.prepare(`SELECT * FROM quality_issues ${where} ORDER BY id DESC`);
   return stmt.all(...params) as QualityIssue[];
+}
+
+/** Get all repair-rate rows ordered by period and product line */
+export function getAllRepairRateEntries(): RepairRateEntry[] {
+  return db.prepare(`
+    SELECT *
+    FROM repair_rate_entries
+    ORDER BY year ASC, month ASC, productLine ASC, id ASC
+  `).all() as RepairRateEntry[];
 }
 
 /** Insert a single issue */
@@ -354,6 +398,53 @@ export function updateIssue(id: number, updates: Partial<Omit<QualityIssue, "id"
 export function deleteIssue(id: number): boolean {
   const result = db.prepare("DELETE FROM quality_issues WHERE id = ?").run(id);
   return result.changes > 0;
+}
+
+/** Bulk insert repair-rate rows */
+export function bulkInsertRepairRateEntries(entries: Omit<RepairRateEntry, "id" | "createdAt">[]): number {
+  const stmt = db.prepare(`
+    INSERT INTO repair_rate_entries (
+      year,
+      month,
+      productLine,
+      repairCount,
+      monthShipmentCount,
+      warrantyShipmentCount,
+      oobDefectCount,
+      monthlyRepairRate,
+      monthlyOobRate,
+      totalRepairRate
+    )
+    VALUES (
+      @year,
+      @month,
+      @productLine,
+      @repairCount,
+      @monthShipmentCount,
+      @warrantyShipmentCount,
+      @oobDefectCount,
+      @monthlyRepairRate,
+      @monthlyOobRate,
+      @totalRepairRate
+    )
+  `);
+
+  const insertMany = db.transaction((items: Omit<RepairRateEntry, "id" | "createdAt">[]) => {
+    let count = 0;
+    for (const item of items) {
+      stmt.run(item);
+      count++;
+    }
+    return count;
+  });
+
+  return insertMany(entries);
+}
+
+/** Delete all repair-rate rows */
+export function deleteAllRepairRateEntries(): number {
+  const result = db.prepare("DELETE FROM repair_rate_entries").run();
+  return result.changes;
 }
 
 /** Get aggregated KPI statistics */

@@ -127,6 +127,7 @@ const TRANSLATIONS: Record<string, any> = {
     performance: '绩效看板',
     data: '详细数据',
     importExcel: '导入表格',
+    importRepairExcel: '导入返修率表',
     exportReport: '导出报表',
     riskWarning: '风险预警',
     resetData: '重置数据',
@@ -136,6 +137,11 @@ const TRANSLATIONS: Record<string, any> = {
     allProducts: '所有产品',
     totalRepairRate: '总返修率',
     repairDashboardTitle: '按产品分类统计返修率趋势',
+    repairImportHint: '返修率看板仅显示单独导入的返修率 Excel 数据，总表导入不会在这里呈现。',
+    repairImportEmpty: '请先在本模块导入返修率 Excel 表格',
+    clearRepairData: '清空返修率表',
+    repairMonth: '日期',
+    repairUploadSuccess: '返修率表导入成功',
     closeRate: '问题关闭率',
     overdue: '逾期未闭环',
     target: '目标',
@@ -230,6 +236,7 @@ const TRANSLATIONS: Record<string, any> = {
     performance: 'Performance Dashboard',
     data: 'Detailed Data',
     importExcel: 'Import Excel',
+    importRepairExcel: 'Import Repair Excel',
     exportReport: 'Export Report',
     riskWarning: 'Risk Warning',
     resetData: 'Reset Data',
@@ -239,6 +246,11 @@ const TRANSLATIONS: Record<string, any> = {
     allProducts: 'All Products',
     totalRepairRate: 'Total Repair Rate',
     repairDashboardTitle: 'Repair Rate Trend by Product Line',
+    repairImportHint: 'The repair dashboard only renders data imported from its dedicated repair-rate Excel file.',
+    repairImportEmpty: 'Import a dedicated repair-rate Excel file in this module first',
+    clearRepairData: 'Clear Repair Data',
+    repairMonth: 'Period',
+    repairUploadSuccess: 'Repair-rate Excel imported successfully',
     closeRate: 'Issue Close Rate',
     overdue: 'Overdue Unclosed',
     target: 'Target',
@@ -337,10 +349,12 @@ export default function App() {
   const [selectedDept, setSelectedDept] = useState<string>('all');
   const [selectedOob, setSelectedOob] = useState<string>('all');
   const [data, setData] = useState<any[]>(MOCK_DATA);
+  const [repairData, setRepairData] = useState<any[]>([]);
   const [isKickedOut, setIsKickedOut] = useState(false);
   const t = (key: string) => TRANSLATIONS[lang][key] || key;
   const [importStatus, setImportStatus] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const repairFileInputRef = useRef<HTMLInputElement>(null);
   const dataTableTopScrollRef = useRef<HTMLDivElement>(null);
   const dataTableScrollRef = useRef<HTMLDivElement>(null);
   const [dataTableScrollWidth, setDataTableScrollWidth] = useState<number>(0);
@@ -499,6 +513,31 @@ export default function App() {
     }
   };
 
+  const loadRepairDataFromBackend = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/repair-rates', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const result = await res.json();
+
+      if (res.status === 401 || res.status === 403) {
+        if (result.error === 'SESSION_EXPIRED_CONCURRENT') {
+          setIsKickedOut(true);
+        } else {
+          handleLogout();
+        }
+        return;
+      }
+
+      if (result.success) {
+        setRepairData(result.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to load repair data from backend:', err);
+    }
+  };
+
   useEffect(() => {
     if (!token) return;
     // Health check
@@ -509,6 +548,7 @@ export default function App() {
           setBackendStatus('online');
           // Load persisted data
           loadDataFromBackend();
+          loadRepairDataFromBackend();
         } else {
           setBackendStatus('offline');
         }
@@ -633,64 +673,70 @@ export default function App() {
       return 'others';
     };
 
-    const keyToOrder = (year: number, month: number) => year * 100 + month;
-    const computeTotalRate = (repairQty: number, oobQty: number, shipQty: number) => {
-      if (!shipQty || shipQty <= 0) return 0;
-      return (0.4 * (repairQty / shipQty) + 0.6 * (oobQty / shipQty)) * 100;
+    const monthLabel = (year: number, month: number) => lang === '中'
+      ? `${year}年${month}月`
+      : `${year}-${String(month).padStart(2, '0')}`;
+    const computeTotalRate = (repairQty: number, warrantyQty: number, oobQty: number, shipQty: number, explicitRate: number) => {
+      if (explicitRate > 0) return explicitRate;
+      const repairRate = warrantyQty > 0 ? (repairQty / warrantyQty) * 100 : 0;
+      const oobRate = shipQty > 0 ? (oobQty / shipQty) * 100 : 0;
+      return repairRate * 0.4 + oobRate * 0.6;
     };
 
     const buckets = new Map<number, any>();
     const ensure = (orderKey: number, year: number, month: number) => {
       if (buckets.has(orderKey)) return buckets.get(orderKey);
+      const blank = { repairQty: 0, oobQty: 0, shipQty: 0, warrantyQty: 0, explicitRate: 0 };
       const item = {
         orderKey,
-        month: `${year}年${month}月`,
-        all: { repairQty: 0, oobQty: 0, shipQty: 0 },
-        roboticArm: { repairQty: 0, oobQty: 0, shipQty: 0 },
-        robot: { repairQty: 0, oobQty: 0, shipQty: 0 },
-        joint: { repairQty: 0, oobQty: 0, shipQty: 0 },
-        others: { repairQty: 0, oobQty: 0, shipQty: 0 },
+        month: monthLabel(year, month),
+        all: { ...blank },
+        roboticArm: { ...blank },
+        robot: { ...blank },
+        joint: { ...blank },
+        others: { ...blank },
       };
       buckets.set(orderKey, item);
       return item;
     };
 
-    for (const row of data as any[]) {
-      const year = Number((row as any).year) || 0;
-      const month = Number((row as any).month) || 0;
+    for (const row of repairData as any[]) {
+      const year = Number(row.year) || 0;
+      const month = Number(row.month) || 0;
       if (year <= 0 || month < 1 || month > 12) continue;
 
-      const orderKey = keyToOrder(year, month);
-      const bucket = ensure(orderKey, year, month);
+      const bucket = ensure(year * 100 + month, year, month);
+      const productLine = normalizeProductLine(row.productLine);
+      const repairQty = Number(row.repairCount) || 0;
+      const oobQty = Number(row.oobDefectCount) || 0;
+      const shipQty = Number(row.monthShipmentCount) || 0;
+      const warrantyQty = Number(row.warrantyShipmentCount) || 0;
+      const explicitRate = Number(row.totalRepairRate) || 0;
 
-      const productLine = normalizeProductLine((row as any).productLine);
-      const shipQty = Number((row as any).productQuantity) || 0;
-      const issueQty = Number((row as any).issueQuantity) || 0;
-      const isOob = Number((row as any).oob) >= 1;
-
+      bucket.all.repairQty += repairQty;
+      bucket.all.oobQty += oobQty;
       bucket.all.shipQty += shipQty;
-      bucket[productLine].shipQty += shipQty;
+      bucket.all.warrantyQty += warrantyQty;
+      bucket.all.explicitRate += explicitRate;
 
-      if (isOob) {
-        bucket.all.oobQty += issueQty;
-        bucket[productLine].oobQty += issueQty;
-      } else {
-        bucket.all.repairQty += issueQty;
-        bucket[productLine].repairQty += issueQty;
-      }
+      bucket[productLine].repairQty += repairQty;
+      bucket[productLine].oobQty += oobQty;
+      bucket[productLine].shipQty += shipQty;
+      bucket[productLine].warrantyQty += warrantyQty;
+      bucket[productLine].explicitRate += explicitRate;
     }
 
     return Array.from(buckets.values())
       .sort((a, b) => a.orderKey - b.orderKey)
-      .map((b) => ({
-        month: b.month,
-        all: computeTotalRate(b.all.repairQty, b.all.oobQty, b.all.shipQty),
-        roboticArm: computeTotalRate(b.roboticArm.repairQty, b.roboticArm.oobQty, b.roboticArm.shipQty),
-        robot: computeTotalRate(b.robot.repairQty, b.robot.oobQty, b.robot.shipQty),
-        joint: computeTotalRate(b.joint.repairQty, b.joint.oobQty, b.joint.shipQty),
-        others: computeTotalRate(b.others.repairQty, b.others.oobQty, b.others.shipQty),
+      .map((bucket) => ({
+        month: bucket.month,
+        all: computeTotalRate(bucket.all.repairQty, bucket.all.warrantyQty, bucket.all.oobQty, bucket.all.shipQty, bucket.all.explicitRate),
+        roboticArm: computeTotalRate(bucket.roboticArm.repairQty, bucket.roboticArm.warrantyQty, bucket.roboticArm.oobQty, bucket.roboticArm.shipQty, bucket.roboticArm.explicitRate),
+        robot: computeTotalRate(bucket.robot.repairQty, bucket.robot.warrantyQty, bucket.robot.oobQty, bucket.robot.shipQty, bucket.robot.explicitRate),
+        joint: computeTotalRate(bucket.joint.repairQty, bucket.joint.warrantyQty, bucket.joint.oobQty, bucket.joint.shipQty, bucket.joint.explicitRate),
+        others: computeTotalRate(bucket.others.repairQty, bucket.others.warrantyQty, bucket.others.oobQty, bucket.others.shipQty, bucket.others.explicitRate),
       }));
-  }, [data]);
+  }, [repairData, lang]);
 
   const dynamicPerformanceData = useMemo(() => {
     const creators: Record<string, { task: number, speed: number }> = {};
@@ -899,12 +945,132 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
+  const handleImportRepairExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const bstr = event.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rawData: any[] = XLSX.utils.sheet_to_json(ws);
+
+        const parseNumber = (...values: any[]) => {
+          for (const value of values) {
+            if (value === undefined || value === null || value === '') continue;
+            const normalized = String(value).replace(/[%\s,]/g, '');
+            const parsed = Number(normalized);
+            if (!Number.isNaN(parsed)) return parsed;
+          }
+          return 0;
+        };
+        const normalizeProductLine = (value: any) => {
+          const text = String(value || '').trim();
+          if (text.includes('机械臂')) return 'roboticArm';
+          if (text.includes('机器人')) return 'robot';
+          if (text.includes('关节')) return 'joint';
+          if (text.includes('其他')) return 'others';
+          return 'others';
+        };
+        const parseYearMonth = (value: any) => {
+          const text = String(value || '').trim();
+          const match = text.match(/(\d{4})\D+(\d{1,2})/);
+          if (match) {
+            return { year: Number(match[1]), month: Number(match[2]) };
+          }
+          const date = new Date(text);
+          if (!Number.isNaN(date.getTime())) {
+            return { year: date.getFullYear(), month: date.getMonth() + 1 };
+          }
+          return { year: 0, month: 0 };
+        };
+
+        const processedData = rawData
+          .map(row => {
+            const period = parseYearMonth(row['日期'] || row['年月'] || row['月份']);
+            const repairCount = parseNumber(row['月度返修产品数（去除OOB）'], row['月度返修产品数(去除OOB)'], row['月度返修产品数']);
+            const monthShipmentCount = parseNumber(row['月度发货数']);
+            const warrantyShipmentCount = parseNumber(row['截止当月保内发货总数']);
+            const oobDefectCount = parseNumber(row['月度OOB开箱不合格产品数'], row['月度OOB开箱不合格产品数']);
+            const monthlyRepairRate = parseNumber(row['月度返修率']);
+            const monthlyOobRate = parseNumber(row['月度OOB开箱不合格率']);
+            const totalRepairRate = parseNumber(row['总返修率']) || (monthlyRepairRate * 0.4 + monthlyOobRate * 0.6);
+
+            return {
+              year: period.year,
+              month: period.month,
+              productLine: normalizeProductLine(row['产品分类'] || row['产品线']),
+              repairCount,
+              monthShipmentCount,
+              warrantyShipmentCount,
+              oobDefectCount,
+              monthlyRepairRate,
+              monthlyOobRate,
+              totalRepairRate,
+            };
+          })
+          .filter(row => row.year > 0 && row.month > 0);
+
+        setRepairData(processedData);
+
+        if (backendStatus === 'online') {
+          try {
+            await fetch('/api/repair-rates', {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const res = await fetch('/api/repair-rates/bulk', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify(processedData),
+            });
+            const result = await res.json();
+
+            if (res.status === 401 || res.status === 403) {
+              if (result.error === 'SESSION_EXPIRED_CONCURRENT') {
+                setIsKickedOut(true);
+              } else {
+                handleLogout();
+              }
+              return;
+            }
+
+            if (result.success) {
+              await loadRepairDataFromBackend();
+              setImportStatus({ show: true, message: `${t('repairUploadSuccess')} (${result.inserted})`, type: 'success' });
+            } else {
+              setImportStatus({ show: true, message: result.error || '返修率表导入失败', type: 'error' });
+            }
+          } catch {
+            setImportStatus({ show: true, message: '返修率表已显示，但后端保存失败', type: 'error' });
+          }
+        } else {
+          setImportStatus({ show: true, message: `${t('repairUploadSuccess')}（仅前端）`, type: 'success' });
+        }
+      } catch (error) {
+        setImportStatus({ show: true, message: '返修率表导入失败，请检查文件格式', type: 'error' });
+      }
+      if (repairFileInputRef.current) repairFileInputRef.current.value = '';
+      setTimeout(() => setImportStatus(prev => ({ ...prev, show: false })), 3000);
+    };
+    reader.readAsBinaryString(file);
+  };
+
   const handleReset = async () => {
-    setData([]);
-    // Clear backend data
+    const isRepairTab = activeTab === 'repair';
+    if (isRepairTab) {
+      setRepairData([]);
+    } else {
+      setData([]);
+    }
     if (backendStatus === 'online') {
       try {
-        const res = await fetch('/api/issues', { 
+        const res = await fetch(isRepairTab ? '/api/repair-rates' : '/api/issues', { 
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -922,7 +1088,7 @@ export default function App() {
         console.error('Failed to reset backend data:', err);
       }
     }
-    setImportStatus({ show: true, message: t('resetData'), type: 'success' });
+    setImportStatus({ show: true, message: isRepairTab ? t('clearRepairData') : t('resetData'), type: 'success' });
     setTimeout(() => setImportStatus(prev => ({ ...prev, show: false })), 3000);
   };
 
@@ -1054,16 +1220,30 @@ export default function App() {
             <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-medium">{t('subtitle')}</p>
           </div>
           <div className="flex items-center gap-2">
-            <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
-            <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-primary rounded-md text-xs font-medium text-white hover:bg-primary/90 transition-colors shadow-sm">
-              <FileSpreadsheet size={14} /> {t('importExcel')}
-            </button>
+            {activeTab !== 'repair' && (
+              <>
+                <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
+                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-primary rounded-md text-xs font-medium text-white hover:bg-primary/90 transition-colors shadow-sm">
+                  <FileSpreadsheet size={14} /> {t('importExcel')}
+                </button>
+              </>
+            )}
+            {activeTab === 'repair' && (
+              <>
+                <input type="file" ref={repairFileInputRef} onChange={handleImportRepairExcel} accept=".xlsx, .xls" className="hidden" />
+                <button onClick={() => repairFileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-primary rounded-md text-xs font-medium text-white hover:bg-primary/90 transition-colors shadow-sm">
+                  <FileSpreadsheet size={14} /> {t('importRepairExcel')}
+                </button>
+              </>
+            )}
             <button onClick={handleReset} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 rounded-md text-xs font-medium text-white hover:bg-amber-600 transition-colors shadow-sm">
-              <RefreshCw size={14} /> {t('resetData')}
+              <RefreshCw size={14} /> {activeTab === 'repair' ? t('clearRepairData') : t('resetData')}
             </button>
-            <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-md border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-200 transition-colors">
-              <Download size={14} /> {t('exportReport')}
-            </button>
+            {activeTab !== 'repair' && (
+              <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-md border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-200 transition-colors">
+                <Download size={14} /> {t('exportReport')}
+              </button>
+            )}
             <div className="flex items-center ml-4 bg-white border border-slate-200 rounded-md p-0.5 text-[10px] font-medium shadow-sm overflow-hidden">
               <button onClick={() => setLang('EN')} className={cn("px-2 py-1 transition-colors", lang === 'EN' ? "bg-slate-100 text-primary" : "text-slate-400")}>EN</button>
               <span className="text-slate-200">|</span>
@@ -1312,30 +1492,47 @@ export default function App() {
 
         {activeTab === 'repair' && (
           <div className="space-y-6">
+            <div className="apple-card p-5 border border-primary/10 bg-primary/5">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">{t('importRepairExcel')}</h3>
+                  <p className="text-xs text-slate-500 mt-1">{t('repairImportHint')}</p>
+                </div>
+                <button onClick={() => repairFileInputRef.current?.click()} className="inline-flex items-center gap-1.5 px-3 py-2 bg-primary rounded-md text-xs font-medium text-white hover:bg-primary/90 transition-colors shadow-sm">
+                  <FileSpreadsheet size={14} /> {t('importRepairExcel')}
+                </button>
+              </div>
+            </div>
             <div className="apple-card p-6">
               <h3 className="text-sm font-semibold text-slate-900 mb-6 flex items-center gap-2">
                 <PieChart size={16} className="text-primary" /> {t('repairDashboardTitle')}
               </h3>
               <div className="h-96 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={repairRateTrendByMonth}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 10, fill: '#64748b' }}
-                      tickFormatter={(v) => `${Number(v).toFixed(2)}%`}
-                    />
-                    <Tooltip formatter={(v: any) => `${Number(v).toFixed(3)}%`} />
-                    <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
-                    <Line type="monotone" dataKey="all" stroke="#0f172a" strokeWidth={2.5} dot={false} name={t('allProducts')} />
-                    <Line type="monotone" dataKey="others" stroke="#f97316" strokeWidth={2} dot={false} name={t('others')} />
-                    <Line type="monotone" dataKey="robot" stroke="#2563eb" strokeWidth={2} dot={false} name={t('robot')} />
-                    <Line type="monotone" dataKey="roboticArm" stroke="#a855f7" strokeWidth={2} dot={false} name={t('roboticArm')} />
-                    <Line type="monotone" dataKey="joint" stroke="#0ea5e9" strokeWidth={2} dot={false} name={t('joint')} />
-                  </LineChart>
-                </ResponsiveContainer>
+                {repairRateTrendByMonth.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={repairRateTrendByMonth}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                      <YAxis
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 10, fill: '#64748b' }}
+                        tickFormatter={(v) => `${Number(v).toFixed(2)}%`}
+                      />
+                      <Tooltip formatter={(v: any) => `${Number(v).toFixed(3)}%`} />
+                      <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                      <Line type="monotone" dataKey="all" stroke="#0f172a" strokeWidth={2.5} dot={false} name={t('allProducts')} />
+                      <Line type="monotone" dataKey="others" stroke="#f97316" strokeWidth={2} dot={false} name={t('others')} />
+                      <Line type="monotone" dataKey="robot" stroke="#2563eb" strokeWidth={2} dot={false} name={t('robot')} />
+                      <Line type="monotone" dataKey="roboticArm" stroke="#a855f7" strokeWidth={2} dot={false} name={t('roboticArm')} />
+                      <Line type="monotone" dataKey="joint" stroke="#0ea5e9" strokeWidth={2} dot={false} name={t('joint')} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
+                    {t('repairImportEmpty')}
+                  </div>
+                )}
               </div>
             </div>
           </div>

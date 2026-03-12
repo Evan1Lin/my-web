@@ -16,6 +16,9 @@ import {
   deleteAllIssues,
   updateIssue,
   deleteIssue,
+  getAllRepairRateEntries,
+  bulkInsertRepairRateEntries,
+  deleteAllRepairRateEntries,
   getKPIStats,
   getTrendData,
   getModelRanking,
@@ -204,6 +207,43 @@ export async function startServer(portOverride?: number): Promise<number> {
       }
     } catch (error: any) {
       console.error("DELETE /api/issues/:id error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /** GET /api/repair-rates — Query repair-rate board rows */
+  app.get("/api/repair-rates", (_req, res) => {
+    try {
+      const entries = getAllRepairRateEntries();
+      res.json({ success: true, data: entries, total: entries.length });
+    } catch (error: any) {
+      console.error("GET /api/repair-rates error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /** POST /api/repair-rates/bulk — Bulk insert repair-rate board rows */
+  app.post("/api/repair-rates/bulk", (req, res) => {
+    try {
+      const entries = req.body;
+      if (!Array.isArray(entries) || entries.length === 0) {
+        return res.status(400).json({ success: false, error: "请提供返修率明细数组" });
+      }
+      const count = bulkInsertRepairRateEntries(entries);
+      res.json({ success: true, inserted: count });
+    } catch (error: any) {
+      console.error("POST /api/repair-rates/bulk error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /** DELETE /api/repair-rates — Delete all repair-rate board rows */
+  app.delete("/api/repair-rates", (_req, res) => {
+    try {
+      const deleted = deleteAllRepairRateEntries();
+      res.json({ success: true, deleted });
+    } catch (error: any) {
+      console.error("DELETE /api/repair-rates error:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
