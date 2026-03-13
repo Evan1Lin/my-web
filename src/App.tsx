@@ -387,7 +387,7 @@ const TRANSLATIONS: Record<string, any> = {
     teamEff: 'Team Efficiency',
     avgResp: 'Avg Response (Days)',
     todoAlert: 'Todo Alerts (Top 5)',
-    rawJanData: 'Jan 2026 Raw Data',
+    rawJanData: 'Raw Quality Data',
     searchPlaceholder: 'Search model, cause...',
     model: 'Model',
     count: 'Count',
@@ -656,6 +656,10 @@ export default function App() {
       return matchYear && matchMonth && matchProductLine && matchCause && matchDept && matchOob;
     });
   }, [selectedYear, selectedMonth, selectedProductLine, selectedCause, selectedDept, selectedOob, data, lang]);
+
+  const detailTableData = useMemo(() => {
+    return [...data];
+  }, [data]);
 
   const kpiStats = useMemo(() => {
     const filterByYearMonth = (dList: any[], year: number | 'all', month: number | 'all') => {
@@ -2654,7 +2658,7 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody className="text-xs text-slate-600">
-                  {filteredData.map((row, idx) => {
+                  {detailTableData.map((row, idx) => {
                     const productModelPath = String((row as any).productModelPath || '').trim();
                     const segments = productModelPath
                       .split('/')
