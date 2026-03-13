@@ -174,7 +174,7 @@ const TRANSLATIONS: Record<string, any> = {
     rootCauseModuleDataTitle: '数据来源',
     rootCauseModuleDataDesc: '将复用 Excel 明细导入链路，后续补充字段映射、统计口径校验和导出报表功能。',
     rootCauseModuleEmpty: '请先导入包含创建时间、根因分类、问题分析类型和产品型号的总表数据',
-    rootCausePeriodLabel: '分析月份',
+    rootCausePeriodLabel: '筛选年月',
     rootCauseBlankLabel: '(空白)',
     rootCauseTotalLabel: '总计',
     rootCauseCumulativeLabel: '累计占比',
@@ -318,7 +318,7 @@ const TRANSLATIONS: Record<string, any> = {
     rootCauseModuleDataTitle: 'Data Source',
     rootCauseModuleDataDesc: 'It will reuse the Excel detail import flow, then add field mapping, metric validation, and report export.',
     rootCauseModuleEmpty: 'Import issue data with created time, root cause, analysis type, and product model fields first',
-    rootCausePeriodLabel: 'Analysis Period',
+    rootCausePeriodLabel: 'Year-Month',
     rootCauseBlankLabel: '(Blank)',
     rootCauseTotalLabel: 'Total',
     rootCauseCumulativeLabel: 'Cumulative Share',
@@ -1155,15 +1155,12 @@ export default function App() {
 
     periodKeys.sort();
 
-    const yearSet = new Set(periodKeys.map((key) => key.split('-')[0]));
-    const singleYear = yearSet.size <= 1;
-
     return periodKeys.map((value) => {
       const [year, month] = value.split('-').map(Number);
       return {
         value,
         label: lang === '中'
-          ? (singleYear ? `${month}月` : `${year}年${month}月`)
+          ? `${year}年${month}月`
           : `${year}-${String(month).padStart(2, '0')}`,
       };
     });
@@ -2347,31 +2344,9 @@ export default function App() {
 
         {activeTab === 'rootCause' && (
           <div className="space-y-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">{t('rootCauseModuleTitle')}</h3>
-                <p className="text-xs text-slate-500 mt-1">{t('rootCauseModuleHint')}</p>
-              </div>
-
-              <div className="w-full max-w-xs">
-                <label className="block text-[10px] text-slate-500 mb-1 ml-1">{t('rootCausePeriodLabel')}</label>
-                <div className="relative">
-                  <select
-                    value={selectedRootCausePeriod}
-                    onChange={(e) => setSelectedRootCausePeriod(e.target.value)}
-                    disabled={!rootCausePeriodOptions.length}
-                    className={cn(
-                      "w-full appearance-none bg-slate-50 border border-slate-200 rounded-md text-xs h-9 pl-3 pr-8 focus:outline-none focus:ring-1 focus:ring-primary/20",
-                      !rootCausePeriodOptions.length && "opacity-60 cursor-not-allowed"
-                    )}
-                  >
-                    {rootCausePeriodOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">{t('rootCauseModuleTitle')}</h3>
+              <p className="text-xs text-slate-500 mt-1">{t('rootCauseModuleHint')}</p>
             </div>
 
             {rootCauseDashboard.hasData ? (
@@ -2405,7 +2380,25 @@ export default function App() {
                 <div className="apple-card p-6">
                   <div className="flex items-center justify-between gap-4 mb-4">
                     <h4 className="text-sm font-semibold text-slate-900">{t('rootCauseBoard2')}</h4>
-                    <span className="text-[11px] text-slate-400">{rootCauseDashboard.selectedPeriodLabel || '-'}</span>
+                    <div className="w-full max-w-[180px]">
+                      <div className="relative">
+                        <select
+                          value={selectedRootCausePeriod}
+                          onChange={(e) => setSelectedRootCausePeriod(e.target.value)}
+                          disabled={!rootCausePeriodOptions.length}
+                          className={cn(
+                            "w-full appearance-none bg-slate-50 border border-slate-200 rounded-md text-xs h-8 pl-3 pr-8 focus:outline-none focus:ring-1 focus:ring-primary/20",
+                            !rootCausePeriodOptions.length && "opacity-60 cursor-not-allowed"
+                          )}
+                          aria-label={t('rootCausePeriodLabel')}
+                        >
+                          {rootCausePeriodOptions.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      </div>
+                    </div>
                   </div>
                   <div className="h-80 w-full">
                     {rootCauseDashboard.monthlyDistribution.length > 0 ? (
