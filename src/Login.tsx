@@ -48,93 +48,89 @@ export default function Login({ onLogin }: LoginProps) {
     <div className="seed-login-shell flex items-center justify-center px-4 py-10 lg:px-8">
       <div className="seed-backdrop-wave" />
       <div className="seed-backdrop-grid" />
-      <div className="relative z-10 w-full max-w-6xl">
-        <div className="grid items-end gap-10 lg:grid-cols-[minmax(0,1fr)_440px]">
-          <div className="seed-login-copy hidden lg:block">
-            <div className="inline-flex items-center gap-3 rounded-full border border-white/70 bg-white/55 px-4 py-2 text-[11px] uppercase tracking-[0.22em] text-slate-500 shadow-[0_18px_45px_rgba(71,103,177,0.08)] backdrop-blur-xl">
-              <span className="seed-brand-chip inline-flex size-8 items-center justify-center rounded-xl text-white">
-                <BarChart3 size={16} />
-              </span>
-              Quality BI Dashboard
+      <div className="relative z-10 flex w-full max-w-xl flex-col items-center">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <div className="inline-flex items-center gap-3 rounded-full border border-white/70 bg-white/55 px-4 py-2 text-[11px] uppercase tracking-[0.22em] text-slate-500 shadow-[0_18px_45px_rgba(71,103,177,0.08)] backdrop-blur-xl">
+            <span className="seed-brand-chip inline-flex size-8 items-center justify-center rounded-xl text-white">
+              <BarChart3 size={16} />
+            </span>
+            Quality BI Dashboard
+          </div>
+          <h1 className="mt-6 text-4xl font-semibold tracking-[-0.06em] text-slate-950 sm:text-5xl">
+            系统登录
+          </h1>
+          <p className="mt-3 max-w-md text-sm leading-7 text-slate-600 sm:text-base">
+            使用你的账号进入质量管理驾驶舱，查看返修率、OOB、问题关闭率和根因分类看板。
+          </p>
+        </div>
+
+        <div className="seed-login-card w-full rounded-[2rem] p-8 shadow-[0_32px_90px_rgba(71,103,177,0.16)] lg:p-9">
+          <div className="flex items-center gap-3">
+            <div className="seed-brand-chip flex size-12 items-center justify-center rounded-2xl text-white">
+              <ShieldCheck size={22} />
             </div>
-            <h1 className="mt-8 text-6xl font-semibold tracking-[-0.07em] text-slate-950 xl:text-[88px]">
-              Seed-like
-              <br />
-              quality cockpit
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-              以字节 Seed 的蓝绿流体视觉为灵感，把质量数据、返修率、OOB 和问题关闭率统一收束到一个更现代的决策界面里。
-            </p>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Secure access</p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-[-0.05em] text-slate-900">请输入账号密码</h2>
+            </div>
           </div>
 
-          <div className="seed-login-card rounded-[2rem] p-8 shadow-[0_32px_90px_rgba(71,103,177,0.16)] lg:p-9">
-            <div className="flex items-center gap-3">
-              <div className="seed-brand-chip flex size-12 items-center justify-center rounded-2xl text-white">
-                <ShieldCheck size={22} />
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Secure access</p>
-                <h2 className="mt-1 text-2xl font-semibold tracking-[-0.05em] text-slate-900">系统登录</h2>
+          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">用户名</label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <User className="text-slate-400" size={18} />
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="seed-input w-full rounded-2xl py-3 pl-10 pr-4 text-sm text-slate-800 transition-all focus:outline-none"
+                  placeholder="请输入账号"
+                />
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">用户名</label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                    <User className="text-slate-400" size={18} />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="seed-input w-full rounded-2xl py-3 pl-10 pr-4 text-sm text-slate-800 transition-all focus:outline-none"
-                    placeholder="请输入账号"
-                  />
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">密码</label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <Lock className="text-slate-400" size={18} />
                 </div>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="seed-input w-full rounded-2xl py-3 pl-10 pr-4 text-sm text-slate-800 transition-all focus:outline-none"
+                  placeholder="请输入密码"
+                />
               </div>
+            </div>
 
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">密码</label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                    <Lock className="text-slate-400" size={18} />
-                  </div>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="seed-input w-full rounded-2xl py-3 pl-10 pr-4 text-sm text-slate-800 transition-all focus:outline-none"
-                    placeholder="请输入密码"
-                  />
-                </div>
+            {error && (
+              <div className="rounded-2xl border border-red-100 bg-red-50/85 p-3 text-sm text-red-600 animate-in fade-in zoom-in duration-200 backdrop-blur-xl">
+                {error}
               </div>
+            )}
 
-              {error && (
-                <div className="rounded-2xl border border-red-100 bg-red-50/85 p-3 text-sm text-red-600 animate-in fade-in zoom-in duration-200 backdrop-blur-xl">
-                  {error}
-                </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="seed-login-button flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-medium text-white transition-all hover:translate-y-[-1px] disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <>
+                  登录系统
+                  <ArrowRight className="ml-2" size={16} />
+                </>
               )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="seed-login-button flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-medium text-white transition-all hover:translate-y-[-1px] disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <Loader2 className="animate-spin" size={18} />
-                ) : (
-                  <>
-                    登录系统
-                    <ArrowRight className="ml-2" size={16} />
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
+            </button>
+          </form>
         </div>
 
         <p className="relative z-10 mt-8 text-center text-xs text-slate-400">
