@@ -126,6 +126,7 @@ const TRANSLATIONS: Record<string, any> = {
     repairDashboard: '返修率看板',
     oobDashboard: 'OOB看板',
     closeDashboard: '问题关闭率看板',
+    rootCauseDashboard: '根因分类看板',
     performance: '绩效看板',
     data: '详细数据',
     importExcel: '导入表格',
@@ -159,6 +160,17 @@ const TRANSLATIONS: Record<string, any> = {
     mainDeptCloseRateTitle: '主责部门问题关闭率趋势',
     initialDeptCloseRateTitle: '初筛主责部门问题关闭率趋势',
     closeDashboardEmpty: '请先导入包含问题数量和问题关闭数量的总表数据',
+    rootCauseModuleTitle: '根因分类看板',
+    rootCauseModuleHint: '独立承载根因分类相关的 4 个质量分析看板与 Excel 报表导出能力。',
+    rootCauseModuleIntroTitle: '模块已预留',
+    rootCauseModuleIntroDesc: '当前先完成独立模块入口与页面骨架，后续将在这里接入根因分类分析逻辑和报表导出流程。',
+    rootCauseModuleBoardsTitle: '计划接入的 4 个看板',
+    rootCauseBoard1: '单根因问题产品总数趋势',
+    rootCauseBoard2: '月度根因问题占比分布',
+    rootCauseBoard3: '进一步追根因分类为空，问题分析分类分布',
+    rootCauseBoard4: '按根因分类统计产品型号问题产品数量',
+    rootCauseModuleDataTitle: '数据来源',
+    rootCauseModuleDataDesc: '将复用 Excel 明细导入链路，后续补充字段映射、统计口径校验和导出报表功能。',
     closeRate: '问题关闭率',
     overdue: '逾期未闭环',
     target: '目标',
@@ -252,6 +264,7 @@ const TRANSLATIONS: Record<string, any> = {
     repairDashboard: 'Repair Rate Dashboard',
     oobDashboard: 'OOB Dashboard',
     closeDashboard: 'Issue Close Rate Dashboard',
+    rootCauseDashboard: 'Root Cause Dashboard',
     performance: 'Performance Dashboard',
     data: 'Detailed Data',
     importExcel: 'Import Excel',
@@ -285,6 +298,17 @@ const TRANSLATIONS: Record<string, any> = {
     mainDeptCloseRateTitle: 'Main Department Issue Close Rate Trend',
     initialDeptCloseRateTitle: 'Initial Department Issue Close Rate Trend',
     closeDashboardEmpty: 'Import issue data with issue quantity and closed quantity first',
+    rootCauseModuleTitle: 'Root Cause Dashboard',
+    rootCauseModuleHint: 'A standalone module reserved for four root-cause analysis dashboards and Excel report export.',
+    rootCauseModuleIntroTitle: 'Module Reserved',
+    rootCauseModuleIntroDesc: 'This release adds the standalone entry and page scaffold first. The root-cause analytics and report export flow will be connected here next.',
+    rootCauseModuleBoardsTitle: 'Planned Dashboards',
+    rootCauseBoard1: 'Single Root Cause Issue Count Trend',
+    rootCauseBoard2: 'Monthly Root Cause Ratio Distribution',
+    rootCauseBoard3: 'Problem Analysis Type Distribution When Root Cause Is Blank',
+    rootCauseBoard4: 'Issue Count by Root Cause and Product Model',
+    rootCauseModuleDataTitle: 'Data Source',
+    rootCauseModuleDataDesc: 'It will reuse the Excel detail import flow, then add field mapping, metric validation, and report export.',
     closeRate: 'Issue Close Rate',
     overdue: 'Overdue Unclosed',
     target: 'Target',
@@ -1623,6 +1647,7 @@ export default function App() {
           <SidebarItem icon={Factory} label={t('repairDashboard')} active={activeTab === 'repair'} onClick={() => setActiveTab('repair')} />
           <SidebarItem icon={BellRing} label={t('oobDashboard')} active={activeTab === 'oob'} onClick={() => setActiveTab('oob')} />
           <SidebarItem icon={CheckCircle2} label={t('closeDashboard')} active={activeTab === 'close'} onClick={() => setActiveTab('close')} />
+          <SidebarItem icon={Layers} label={t('rootCauseDashboard')} active={activeTab === 'rootCause'} onClick={() => setActiveTab('rootCause')} />
           <SidebarItem icon={Settings} label={t('data')} active={activeTab === 'data'} onClick={() => setActiveTab('data')} />
         </nav>
         
@@ -1667,6 +1692,7 @@ export default function App() {
               {activeTab === 'repair' && t('repairDashboard')}
               {activeTab === 'oob' && t('oobDashboard')}
               {activeTab === 'close' && t('closeDashboard')}
+              {activeTab === 'rootCause' && t('rootCauseDashboard')}
               {activeTab === 'data' && t('data')}
             </h1>
             <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-medium">{t('subtitle')}</p>
@@ -2123,6 +2149,39 @@ export default function App() {
             ) : (
               <div className="apple-card p-6 text-sm text-slate-400">{t('closeDashboardEmpty')}</div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'rootCause' && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">{t('rootCauseModuleTitle')}</h3>
+              <p className="text-xs text-slate-500 mt-1">{t('rootCauseModuleHint')}</p>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <div className="apple-card p-6">
+                <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('rootCauseModuleIntroTitle')}</h4>
+                <p className="text-sm leading-6 text-slate-500">{t('rootCauseModuleIntroDesc')}</p>
+              </div>
+
+              <div className="apple-card p-6">
+                <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('rootCauseModuleDataTitle')}</h4>
+                <p className="text-sm leading-6 text-slate-500">{t('rootCauseModuleDataDesc')}</p>
+              </div>
+            </div>
+
+            <div className="apple-card p-6">
+              <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('rootCauseModuleBoardsTitle')}</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[t('rootCauseBoard1'), t('rootCauseBoard2'), t('rootCauseBoard3'), t('rootCauseBoard4')].map((item, index) => (
+                  <div key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                    <div className="text-[10px] font-bold tracking-[0.2em] text-slate-400">BOARD {index + 1}</div>
+                    <div className="mt-2 text-sm font-medium text-slate-700">{item}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
