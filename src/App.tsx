@@ -24,7 +24,6 @@ import {
   CheckCircle2,
   X,
   Clock,
-  Users,
   Target,
   Layers,
   LogOut,
@@ -191,6 +190,7 @@ const TRANSLATIONS: Record<string, any> = {
     rootCauseTotalLabel: '总计',
     rootCauseCumulativeLabel: '累计占比',
     rootCauseTableTitle: '根因分类与产品型号透视明细',
+    accountLabel: '当前账号',
     closeRate: '问题关闭率',
     overdue: '逾期未闭环',
     target: '目标',
@@ -335,6 +335,7 @@ const TRANSLATIONS: Record<string, any> = {
     rootCauseTotalLabel: 'Total',
     rootCauseCumulativeLabel: 'Cumulative Share',
     rootCauseTableTitle: 'Root Cause by Product Model Pivot',
+    accountLabel: 'Signed In As',
     closeRate: 'Issue Close Rate',
     overdue: 'Overdue Unclosed',
     target: 'Target',
@@ -1909,17 +1910,8 @@ export default function App() {
           </div>
           
           <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 mt-2">
-            <div className="flex items-center gap-3">
-              <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold uppercase">
-                {username ? username[0] : 'U'}
-              </div>
-              <div className="flex-1">
-                <p className="text-xs font-bold text-slate-900 leading-none">{username || 'User'}</p>
-                <div className="mt-1 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold bg-primary/10 text-primary">
-                  ADMIN
-                </div>
-              </div>
-            </div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('accountLabel')}</p>
+            <p className="mt-2 text-sm font-semibold text-slate-900 break-all">{username || 'User'}</p>
             <button onClick={handleLogout} className="w-full mt-3 flex justify-center items-center gap-2 py-1.5 rounded-md text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all">
               <LogOut size={14} /> 退出登录
             </button>
