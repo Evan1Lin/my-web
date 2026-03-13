@@ -60,6 +60,18 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+function getHeatmapCellBackground(value: number, maxValue: number) {
+  if (value <= 0 || maxValue <= 0) return 'rgba(226, 232, 240, 0.6)';
+  const ratio = Math.min(1, value / maxValue);
+  const alpha = 0.22 + ratio * 0.68;
+  return `rgba(37, 99, 235, ${alpha.toFixed(3)})`;
+}
+
+function getHeatmapCellTextColor(value: number, maxValue: number) {
+  if (value <= 0 || maxValue <= 0) return '#94a3b8';
+  return value / maxValue >= 0.45 ? '#ffffff' : '#0f172a';
+}
+
 // --- Mock Data based on User's Jan 2026 Excel ---
 
 const MOCK_DATA = [];
@@ -167,7 +179,7 @@ const TRANSLATIONS: Record<string, any> = {
     rootCauseModuleIntroTitle: '模块已预留',
     rootCauseModuleIntroDesc: '当前先完成独立模块入口与页面骨架，后续将在这里接入根因分类分析逻辑和报表导出流程。',
     rootCauseModuleBoardsTitle: '计划接入的 4 个看板',
-    rootCauseBoard1: '单根因问题产品总数趋势',
+    rootCauseBoard1: '根因-产品型号热力矩阵',
     rootCauseBoard2: '月度根因问题占比分布',
     rootCauseBoard3: '进一步追根因分类为空，问题分析分类分布',
     rootCauseBoard4: '按根因分类统计产品型号问题产品数量',
@@ -311,7 +323,7 @@ const TRANSLATIONS: Record<string, any> = {
     rootCauseModuleIntroTitle: 'Module Reserved',
     rootCauseModuleIntroDesc: 'This release adds the standalone entry and page scaffold first. The root-cause analytics and report export flow will be connected here next.',
     rootCauseModuleBoardsTitle: 'Planned Dashboards',
-    rootCauseBoard1: 'Single Root Cause Issue Count Trend',
+    rootCauseBoard1: 'Root Cause by Product Model Heatmap',
     rootCauseBoard2: 'Monthly Root Cause Ratio Distribution',
     rootCauseBoard3: 'Problem Analysis Type Distribution When Root Cause Is Blank',
     rootCauseBoard4: 'Issue Count by Root Cause and Product Model',
@@ -420,6 +432,7 @@ export default function App() {
   const [selectedCause, setSelectedCause] = useState<string>('all');
   const [selectedDept, setSelectedDept] = useState<string>('all');
   const [selectedOob, setSelectedOob] = useState<string>('all');
+  const [selectedRootCauseMatrixPeriod, setSelectedRootCauseMatrixPeriod] = useState<string>('');
   const [selectedRootCausePeriod, setSelectedRootCausePeriod] = useState<string>('');
   const [data, setData] = useState<any[]>(MOCK_DATA);
   const [repairData, setRepairData] = useState<any[]>([]);
@@ -1168,15 +1181,22 @@ export default function App() {
 
   useEffect(() => {
     if (!rootCausePeriodOptions.length) {
+      if (selectedRootCauseMatrixPeriod) setSelectedRootCauseMatrixPeriod('');
       if (selectedRootCausePeriod) setSelectedRootCausePeriod('');
       return;
     }
 
-    const exists = rootCausePeriodOptions.some((item) => item.value === selectedRootCausePeriod);
-    if (!exists) {
-      setSelectedRootCausePeriod(rootCausePeriodOptions[rootCausePeriodOptions.length - 1].value);
+    const latestValue = rootCausePeriodOptions[rootCausePeriodOptions.length - 1].value;
+    const matrixExists = rootCausePeriodOptions.some((item) => item.value === selectedRootCauseMatrixPeriod);
+    if (!matrixExists) {
+      setSelectedRootCauseMatrixPeriod(latestValue);
     }
-  }, [rootCausePeriodOptions, selectedRootCausePeriod]);
+
+    const periodExists = rootCausePeriodOptions.some((item) => item.value === selectedRootCausePeriod);
+    if (!periodExists) {
+      setSelectedRootCausePeriod(latestValue);
+    }
+  }, [rootCausePeriodOptions, selectedRootCauseMatrixPeriod, selectedRootCausePeriod]);
 
   const rootCauseDashboard = useMemo(() => {
     const blankLabel = t('rootCauseBlankLabel');
@@ -1198,6 +1218,7 @@ export default function App() {
     const periodLabelMap = new Map(rootCausePeriodOptions.map((item) => [item.value, item.label]));
 
     const periodCauseCounts = new Map<string, Record<string, number>>();
+    const periodCauseModelCounts = new Map<string, Record<string, Record<string, number>>>();
     const causeTotals: Record<string, number> = {};
     const blankAnalysisCounts: Record<string, number> = {};
     const causeModelCounts: Record<string, Record<string, number>> = {};
@@ -1218,6 +1239,16 @@ export default function App() {
       }
       const causeCountMap = periodCauseCounts.get(periodKey)!;
       causeCountMap[cause] = (causeCountMap[cause] || 0) + 1;
+
+      if (!periodCauseModelCounts.has(periodKey)) {
+        periodCauseModelCounts.set(periodKey, {});
+      }
+      const periodCauseModelMap = periodCauseModelCounts.get(periodKey)!;
+      if (!periodCauseModelMap[cause]) {
+        periodCauseModelMap[cause] = {};
+      }
+      periodCauseModelMap[cause][model] = (periodCauseModelMap[cause][model] || 0) + 1;
+
       causeTotals[cause] = (causeTotals[cause] || 0) + 1;
 
       if (cause === blankLabel) {
@@ -1235,19 +1266,40 @@ export default function App() {
       .sort((a, b) => b[1] - a[1])
       .map(([name]) => name);
 
-    const trendData = rootCausePeriodOptions.map((period) => {
-      const causeCountMap = periodCauseCounts.get(period.value) || {};
-      const row: Record<string, any> = {
-        month: period.label,
-        total: Object.values(causeCountMap).reduce((sum, value) => sum + value, 0),
-      };
-
-      causeList.forEach((cause) => {
-        row[cause] = causeCountMap[cause] || 0;
+    const selectedMatrixPeriodValue = selectedRootCauseMatrixPeriod || rootCausePeriodOptions[rootCausePeriodOptions.length - 1]?.value || '';
+    const selectedMatrixPeriodLabel = periodLabelMap.get(selectedMatrixPeriodValue) || '';
+    const selectedMatrixCauseModelCounts = periodCauseModelCounts.get(selectedMatrixPeriodValue) || {};
+    const selectedMatrixCauseTotals = Object.entries(selectedMatrixCauseModelCounts).reduce<Record<string, number>>((acc, [cause, modelMap]) => {
+      acc[cause] = Object.values(modelMap).reduce((sum, value) => sum + value, 0);
+      return acc;
+    }, {});
+    const selectedMatrixModelTotals = Object.values(selectedMatrixCauseModelCounts).reduce<Record<string, number>>((acc, modelMap) => {
+      Object.entries(modelMap).forEach(([model, count]) => {
+        acc[model] = (acc[model] || 0) + count;
       });
-
-      return row;
+      return acc;
+    }, {});
+    const heatmapCauses = Object.entries(selectedMatrixCauseTotals)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'))
+      .map(([name]) => name);
+    const heatmapModels = Object.entries(selectedMatrixModelTotals)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'))
+      .map(([name]) => name);
+    const heatmapRows = heatmapCauses.map((cause) => {
+      const cells = heatmapModels.map((model) => ({
+        model,
+        value: selectedMatrixCauseModelCounts[cause]?.[model] || 0,
+      }));
+      return {
+        cause,
+        total: cells.reduce((sum, cell) => sum + cell.value, 0),
+        cells,
+      };
     });
+    const heatmapMaxValue = heatmapRows.reduce((max, row) => {
+      const rowMax = row.cells.reduce((cellMax, cell) => Math.max(cellMax, cell.value), 0);
+      return Math.max(max, rowMax);
+    }, 0);
 
     const selectedPeriodValue = selectedRootCausePeriod || rootCausePeriodOptions[rootCausePeriodOptions.length - 1]?.value || '';
     const selectedPeriodLabel = periodLabelMap.get(selectedPeriodValue) || '';
@@ -1301,10 +1353,13 @@ export default function App() {
       blankLabel,
       totalLabel,
       colorPalette,
+      matrixPeriodValue: selectedMatrixPeriodValue,
+      matrixPeriodLabel: selectedMatrixPeriodLabel,
+      heatmapModels,
+      heatmapRows,
+      heatmapMaxValue,
       selectedPeriodValue,
       selectedPeriodLabel,
-      trendCauses: causeList,
-      trendData,
       monthlyDistribution,
       blankAnalysisDistribution,
       chartModels,
@@ -1312,7 +1367,7 @@ export default function App() {
       pivotModels: modelList,
       pivotRows: [...causePivotRows, totalRow],
     };
-  }, [data, lang, rootCausePeriodOptions, selectedRootCausePeriod]);
+  }, [data, lang, rootCausePeriodOptions, selectedRootCauseMatrixPeriod, selectedRootCausePeriod]);
 
   const dynamicPerformanceData = useMemo(() => {
     const creators: Record<string, { task: number, speed: number }> = {};
@@ -2351,29 +2406,90 @@ export default function App() {
 
             {rootCauseDashboard.hasData ? (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <div className="apple-card p-6">
-                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('rootCauseBoard1')}</h4>
-                  <div className="h-80 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={rootCauseDashboard.trendData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                        <Tooltip />
-                        <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
-                        {rootCauseDashboard.trendCauses.map((cause, idx) => (
-                          <Line
-                            key={cause}
-                            type="monotone"
-                            dataKey={(entry: any) => entry[cause]}
-                            stroke={rootCauseDashboard.colorPalette[idx % rootCauseDashboard.colorPalette.length]}
-                            strokeWidth={2}
-                            dot={false}
-                            name={cause}
-                          />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
+                <div className="apple-card p-6 xl:col-span-2">
+                  <div className="flex flex-col gap-4 mb-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-900">{t('rootCauseBoard1')}</h4>
+                      <p className="text-[11px] text-slate-500 mt-1">{rootCauseDashboard.matrixPeriodLabel}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-full min-w-[160px] max-w-[180px]">
+                        <div className="relative">
+                          <select
+                            value={selectedRootCauseMatrixPeriod}
+                            onChange={(e) => setSelectedRootCauseMatrixPeriod(e.target.value)}
+                            disabled={!rootCausePeriodOptions.length}
+                            className={cn(
+                              "w-full appearance-none bg-slate-50 border border-slate-200 rounded-md text-xs h-8 pl-3 pr-8 focus:outline-none focus:ring-1 focus:ring-primary/20",
+                              !rootCausePeriodOptions.length && "opacity-60 cursor-not-allowed"
+                            )}
+                            aria-label={t('rootCausePeriodLabel')}
+                          >
+                            {rootCausePeriodOptions.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                          <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        </div>
+                      </div>
+                      <div className="hidden sm:flex items-center gap-2 text-[11px] text-slate-500">
+                        <span>0</span>
+                        <div
+                          className="h-2 w-24 rounded-full"
+                          style={{ background: 'linear-gradient(90deg, rgba(226, 232, 240, 0.6) 0%, rgba(37, 99, 235, 0.9) 100%)' }}
+                        />
+                        <span>{rootCauseDashboard.heatmapMaxValue}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
+                    {rootCauseDashboard.heatmapRows.length > 0 && rootCauseDashboard.heatmapModels.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-max border-separate border-spacing-2">
+                          <thead>
+                            <tr>
+                              <th className="sticky left-0 z-20 rounded-xl bg-white px-4 py-3 text-left text-[11px] font-semibold text-slate-600 shadow-sm whitespace-nowrap">
+                                {t('rootCause')}
+                              </th>
+                              {rootCauseDashboard.heatmapModels.map((model) => (
+                                <th
+                                  key={model}
+                                  className="min-w-[88px] rounded-xl bg-white px-3 py-3 text-center text-[11px] font-semibold text-slate-600 shadow-sm whitespace-nowrap"
+                                >
+                                  {model}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rootCauseDashboard.heatmapRows.map((row) => (
+                              <tr key={row.cause}>
+                                <th className="sticky left-0 z-10 rounded-xl bg-white px-4 py-3 text-left text-xs font-medium text-slate-700 shadow-sm whitespace-nowrap">
+                                  {row.cause}
+                                </th>
+                                {row.cells.map((cell) => (
+                                  <td key={`${row.cause}-${cell.model}`} className="min-w-[88px]">
+                                    <div
+                                      className="flex h-14 items-center justify-center rounded-xl border border-white/70 text-sm font-semibold shadow-sm transition-colors"
+                                      style={{
+                                        backgroundColor: getHeatmapCellBackground(cell.value, rootCauseDashboard.heatmapMaxValue),
+                                        color: getHeatmapCellTextColor(cell.value, rootCauseDashboard.heatmapMaxValue),
+                                      }}
+                                    >
+                                      {cell.value}
+                                    </div>
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="h-80 flex items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white text-sm text-slate-400">
+                        {t('rootCauseModuleEmpty')}
+                      </div>
+                    )}
                   </div>
                 </div>
 
