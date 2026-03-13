@@ -1893,7 +1893,7 @@ export default function App() {
               <BarChart3 size={22} />
             </div>
             <div>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">ByteDance Seed Style</p>
+              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Quality Operations Center</p>
               <span className="text-[26px] font-semibold tracking-[-0.05em] text-slate-950">{t('brand')}</span>
             </div>
           </div>
@@ -1934,7 +1934,7 @@ export default function App() {
         {/* Header */}
         <header className="mb-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Seed-inspired quality cockpit</p>
+            <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Quality insights cockpit</p>
             <h1 className="mt-3 text-3xl font-semibold tracking-[-0.06em] text-slate-950 md:text-[42px]">
               {activeTab === 'overview' && t('title')}
               {activeTab === 'repair' && t('repairDashboard')}
