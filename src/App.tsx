@@ -1620,7 +1620,6 @@ export default function App() {
         </div>
         <nav className="flex-1 px-4 space-y-1">
           <SidebarItem icon={LayoutDashboard} label={t('overview')} active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
-          <SidebarItem icon={TrendingUp} label={t('trend')} active={activeTab === 'trend'} onClick={() => setActiveTab('trend')} />
           <SidebarItem icon={Factory} label={t('repairDashboard')} active={activeTab === 'repair'} onClick={() => setActiveTab('repair')} />
           <SidebarItem icon={BellRing} label={t('oobDashboard')} active={activeTab === 'oob'} onClick={() => setActiveTab('oob')} />
           <SidebarItem icon={CheckCircle2} label={t('closeDashboard')} active={activeTab === 'close'} onClick={() => setActiveTab('close')} />
@@ -1665,7 +1664,6 @@ export default function App() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
               {activeTab === 'overview' && t('title')}
-              {activeTab === 'trend' && t('trend')}
               {activeTab === 'repair' && t('repairDashboard')}
               {activeTab === 'oob' && t('oobDashboard')}
               {activeTab === 'close' && t('closeDashboard')}
@@ -1882,66 +1880,6 @@ export default function App() {
               </div>
             </div>
           </>
-        )}
-
-        {activeTab === 'trend' && (
-          <div className="space-y-6">
-            <div className="apple-card p-6">
-              <h3 className="text-sm font-semibold text-slate-900 mb-6 flex items-center gap-2"><TrendingUp size={16} className="text-primary" /> {t('trendTitle')}</h3>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={dynamicTrendHistory}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
-                    <ReferenceLine y={50} label={{ position: 'right', value: `${t('target')} (50)`, fill: '#ef4444', fontSize: 10 }} stroke="#ef4444" strokeDasharray="5 5" />
-                    <Line type="monotone" dataKey="issues" stroke="#1e3a8a" strokeWidth={3} dot={{ r: 4, fill: '#1e3a8a' }} activeDot={{ r: 6 }} name={t('monthlyIssues')} />
-                    <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: '10px', paddingBottom: '20px' }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="apple-card p-6">
-                <h3 className="text-sm font-semibold text-slate-900 mb-6 flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500" /> {t('closeRateTrend')}</h3>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={dynamicTrendHistory}>
-                      <defs>
-                        <linearGradient id="colorClose" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} unit="%" />
-                      <Tooltip />
-                      <Area type="monotone" dataKey="closeRate" stroke="#10b981" fillOpacity={1} fill="url(#colorClose)" strokeWidth={2} name={t('closeRate')} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div className="apple-card p-6">
-                <h3 className="text-sm font-semibold text-slate-900 mb-6 flex items-center gap-2"><Clock size={16} className="text-amber-500" /> {t('avgTimeTrend')}</h3>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={dynamicTrendHistory}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                      <Tooltip />
-                      <ReferenceLine y={7} label={{ position: 'right', value: t('sla'), fill: '#f59e0b', fontSize: 10 }} stroke="#f59e0b" strokeDasharray="3 3" />
-                      <Line type="step" dataKey="avgTime" stroke="#d97706" strokeWidth={2} dot={{ r: 4 }} name={t('avgResp')} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-          </div>
         )}
 
         {activeTab === 'repair' && (
