@@ -52,14 +52,6 @@ db.exec(`
     creator TEXT NOT NULL DEFAULT 'System',
     createdAt TEXT NOT NULL DEFAULT (datetime('now'))
   );
-
-  CREATE INDEX IF NOT EXISTS idx_issues_year ON quality_issues(year);
-  CREATE INDEX IF NOT EXISTS idx_issues_month ON quality_issues(month);
-  CREATE INDEX IF NOT EXISTS idx_issues_productLine ON quality_issues(productLine);
-  CREATE INDEX IF NOT EXISTS idx_issues_cause ON quality_issues(cause);
-  CREATE INDEX IF NOT EXISTS idx_issues_dept ON quality_issues(dept);
-  CREATE INDEX IF NOT EXISTS idx_issues_oob ON quality_issues(oob);
-  CREATE INDEX IF NOT EXISTS idx_issues_closed ON quality_issues(closed);
 `);
 
 db.exec(`
@@ -92,6 +84,16 @@ try { db.exec("ALTER TABLE quality_issues ADD COLUMN snDate TEXT NOT NULL DEFAUL
 try { db.exec("ALTER TABLE quality_issues ADD COLUMN analysisType TEXT NOT NULL DEFAULT '';"); } catch (e) {}
 try { db.exec("ALTER TABLE quality_issues ADD COLUMN closedQuantity INTEGER NOT NULL DEFAULT 0;"); } catch (e) {}
 
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_issues_year ON quality_issues(year);
+  CREATE INDEX IF NOT EXISTS idx_issues_month ON quality_issues(month);
+  CREATE INDEX IF NOT EXISTS idx_issues_productLine ON quality_issues(productLine);
+  CREATE INDEX IF NOT EXISTS idx_issues_cause ON quality_issues(cause);
+  CREATE INDEX IF NOT EXISTS idx_issues_dept ON quality_issues(dept);
+  CREATE INDEX IF NOT EXISTS idx_issues_oob ON quality_issues(oob);
+  CREATE INDEX IF NOT EXISTS idx_issues_closed ON quality_issues(closed);
+`);
+
 try {
   db.exec(`
     UPDATE quality_issues
@@ -117,13 +119,18 @@ try {
   `);
 } catch (e) {}
 
-// --- Initialize default user ---
-const userCount = db.prepare("SELECT COUNT(*) as count FROM auth_users").get() as any;
-if (userCount.count === 0) {
-  const defaultHash = bcrypt.hashSync("realman", 10);
-  db.prepare("INSERT INTO auth_users (username, password_hash) VALUES (?, ?)").run("evan", defaultHash);
-  console.log("✅ Created default admin user: evan");
+// --- Initialize default users ---
+function ensureAuthUser(username: string, password: string) {
+  const existingUser = db.prepare("SELECT username FROM auth_users WHERE username = ?").get(username) as { username: string } | undefined;
+  if (existingUser) return;
+
+  const passwordHash = bcrypt.hashSync(password, 10);
+  db.prepare("INSERT INTO auth_users (username, password_hash) VALUES (?, ?)").run(username, passwordHash);
+  console.log(`✅ Created auth user: ${username}`);
 }
+
+ensureAuthUser("evan", "realman");
+ensureAuthUser("ella", "realman888");
 
 // --- Types ---
 export interface QualityIssue {
