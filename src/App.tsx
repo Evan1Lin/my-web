@@ -35,6 +35,7 @@ import * as XLSX from 'xlsx';
 import { 
   BarChart, 
   Bar, 
+  ComposedChart,
   XAxis, 
   YAxis, 
   CartesianGrid, 
@@ -45,6 +46,7 @@ import {
   Pie,
   LineChart,
   Line,
+  LabelList,
   ReferenceLine,
   Legend,
   AreaChart,
@@ -171,6 +173,12 @@ const TRANSLATIONS: Record<string, any> = {
     rootCauseBoard4: '按根因分类统计产品型号问题产品数量',
     rootCauseModuleDataTitle: '数据来源',
     rootCauseModuleDataDesc: '将复用 Excel 明细导入链路，后续补充字段映射、统计口径校验和导出报表功能。',
+    rootCauseModuleEmpty: '请先导入包含创建时间、根因分类、问题分析类型和产品型号的总表数据',
+    rootCausePeriodLabel: '分析月份',
+    rootCauseBlankLabel: '(空白)',
+    rootCauseTotalLabel: '总计',
+    rootCauseCumulativeLabel: '累计占比',
+    rootCauseTableTitle: '根因分类与产品型号透视明细',
     closeRate: '问题关闭率',
     overdue: '逾期未闭环',
     target: '目标',
@@ -309,6 +317,12 @@ const TRANSLATIONS: Record<string, any> = {
     rootCauseBoard4: 'Issue Count by Root Cause and Product Model',
     rootCauseModuleDataTitle: 'Data Source',
     rootCauseModuleDataDesc: 'It will reuse the Excel detail import flow, then add field mapping, metric validation, and report export.',
+    rootCauseModuleEmpty: 'Import issue data with created time, root cause, analysis type, and product model fields first',
+    rootCausePeriodLabel: 'Analysis Period',
+    rootCauseBlankLabel: '(Blank)',
+    rootCauseTotalLabel: 'Total',
+    rootCauseCumulativeLabel: 'Cumulative Share',
+    rootCauseTableTitle: 'Root Cause by Product Model Pivot',
     closeRate: 'Issue Close Rate',
     overdue: 'Overdue Unclosed',
     target: 'Target',
@@ -406,6 +420,7 @@ export default function App() {
   const [selectedCause, setSelectedCause] = useState<string>('all');
   const [selectedDept, setSelectedDept] = useState<string>('all');
   const [selectedOob, setSelectedOob] = useState<string>('all');
+  const [selectedRootCausePeriod, setSelectedRootCausePeriod] = useState<string>('');
   const [data, setData] = useState<any[]>(MOCK_DATA);
   const [repairData, setRepairData] = useState<any[]>([]);
   const [isKickedOut, setIsKickedOut] = useState(false);
@@ -1123,6 +1138,184 @@ export default function App() {
       initialDepartments: initialDeptClose.departments,
     };
   }, [data, lang]);
+
+  const rootCausePeriodOptions = useMemo(() => {
+    const periodKeys = Array.from(
+      new Set(
+        data
+          .map((row: any) => {
+            const year = Number(row.year) || 0;
+            const month = Number(row.month) || 0;
+            if (year <= 0 || month < 1 || month > 12) return '';
+            return `${year}-${String(month).padStart(2, '0')}`;
+          })
+          .filter(Boolean)
+      )
+    ) as string[];
+
+    periodKeys.sort();
+
+    const yearSet = new Set(periodKeys.map((key) => key.split('-')[0]));
+    const singleYear = yearSet.size <= 1;
+
+    return periodKeys.map((value) => {
+      const [year, month] = value.split('-').map(Number);
+      return {
+        value,
+        label: lang === '中'
+          ? (singleYear ? `${month}月` : `${year}年${month}月`)
+          : `${year}-${String(month).padStart(2, '0')}`,
+      };
+    });
+  }, [data, lang]);
+
+  useEffect(() => {
+    if (!rootCausePeriodOptions.length) {
+      if (selectedRootCausePeriod) setSelectedRootCausePeriod('');
+      return;
+    }
+
+    const exists = rootCausePeriodOptions.some((item) => item.value === selectedRootCausePeriod);
+    if (!exists) {
+      setSelectedRootCausePeriod(rootCausePeriodOptions[rootCausePeriodOptions.length - 1].value);
+    }
+  }, [rootCausePeriodOptions, selectedRootCausePeriod]);
+
+  const rootCauseDashboard = useMemo(() => {
+    const blankLabel = t('rootCauseBlankLabel');
+    const totalLabel = t('rootCauseTotalLabel');
+    const colorPalette = ['#0f172a', '#2563eb', '#f97316', '#a855f7', '#0ea5e9', '#16a34a', '#eab308', '#ef4444'];
+    const normalizeRootCause = (value: any) => {
+      const text = String(value || '').trim();
+      if (!text || text === '未分类') return blankLabel;
+      return text;
+    };
+    const normalizeAnalysisType = (value: any) => {
+      const text = String(value || '').trim();
+      return text || blankLabel;
+    };
+    const normalizeModel = (value: any) => {
+      const text = String(value || '').trim();
+      return text || blankLabel;
+    };
+    const periodLabelMap = new Map(rootCausePeriodOptions.map((item) => [item.value, item.label]));
+
+    const periodCauseCounts = new Map<string, Record<string, number>>();
+    const causeTotals: Record<string, number> = {};
+    const blankAnalysisCounts: Record<string, number> = {};
+    const causeModelCounts: Record<string, Record<string, number>> = {};
+    const modelTotals: Record<string, number> = {};
+
+    data.forEach((row: any) => {
+      const year = Number(row.year) || 0;
+      const month = Number(row.month) || 0;
+      if (year <= 0 || month < 1 || month > 12) return;
+
+      const periodKey = `${year}-${String(month).padStart(2, '0')}`;
+      const cause = normalizeRootCause(row.cause);
+      const analysisType = normalizeAnalysisType((row as any).analysisType);
+      const model = normalizeModel(row.model || (row as any).productModelPath);
+
+      if (!periodCauseCounts.has(periodKey)) {
+        periodCauseCounts.set(periodKey, {});
+      }
+      const causeCountMap = periodCauseCounts.get(periodKey)!;
+      causeCountMap[cause] = (causeCountMap[cause] || 0) + 1;
+      causeTotals[cause] = (causeTotals[cause] || 0) + 1;
+
+      if (cause === blankLabel) {
+        blankAnalysisCounts[analysisType] = (blankAnalysisCounts[analysisType] || 0) + 1;
+      }
+
+      if (!causeModelCounts[cause]) {
+        causeModelCounts[cause] = {};
+      }
+      causeModelCounts[cause][model] = (causeModelCounts[cause][model] || 0) + 1;
+      modelTotals[model] = (modelTotals[model] || 0) + 1;
+    });
+
+    const causeList = Object.entries(causeTotals)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => name);
+
+    const trendData = rootCausePeriodOptions.map((period) => {
+      const causeCountMap = periodCauseCounts.get(period.value) || {};
+      const row: Record<string, any> = {
+        month: period.label,
+        total: Object.values(causeCountMap).reduce((sum, value) => sum + value, 0),
+      };
+
+      causeList.forEach((cause) => {
+        row[cause] = causeCountMap[cause] || 0;
+      });
+
+      return row;
+    });
+
+    const selectedPeriodValue = selectedRootCausePeriod || rootCausePeriodOptions[rootCausePeriodOptions.length - 1]?.value || '';
+    const selectedPeriodLabel = periodLabelMap.get(selectedPeriodValue) || '';
+    const selectedPeriodCounts = periodCauseCounts.get(selectedPeriodValue) || {};
+    const selectedPeriodTotal = Object.values(selectedPeriodCounts).reduce((sum, value) => sum + value, 0);
+
+    let cumulativeShare = 0;
+    const monthlyDistribution = Object.entries(selectedPeriodCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => {
+        const share = selectedPeriodTotal > 0 ? (count / selectedPeriodTotal) * 100 : 0;
+        cumulativeShare += share;
+        return {
+          name,
+          count,
+          share,
+          cumulativeShare,
+        };
+      });
+
+    const blankAnalysisDistribution = Object.entries(blankAnalysisCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count }));
+
+    const modelList = Object.entries(modelTotals)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => name);
+    const chartModels = modelList.slice(0, 6);
+    const causePivotRows = causeList.map((cause) => {
+      const row: Record<string, any> = { cause };
+      modelList.forEach((model) => {
+        row[model] = causeModelCounts[cause]?.[model] || 0;
+      });
+      row[totalLabel] = modelList.reduce((sum, model) => sum + (row[model] || 0), 0);
+      return row;
+    });
+    const totalRow = modelList.reduce<Record<string, any>>((acc, model) => {
+      acc[model] = causePivotRows.reduce((sum, row) => sum + (row[model] || 0), 0);
+      return acc;
+    }, { cause: totalLabel, [totalLabel]: causePivotRows.reduce((sum, row) => sum + (row[totalLabel] || 0), 0) });
+    const causeModelChartData = causeList.map((cause) => {
+      const row: Record<string, any> = { cause };
+      chartModels.forEach((model) => {
+        row[model] = causeModelCounts[cause]?.[model] || 0;
+      });
+      return row;
+    });
+
+    return {
+      hasData: rootCausePeriodOptions.length > 0 && causeList.length > 0,
+      blankLabel,
+      totalLabel,
+      colorPalette,
+      selectedPeriodValue,
+      selectedPeriodLabel,
+      trendCauses: causeList,
+      trendData,
+      monthlyDistribution,
+      blankAnalysisDistribution,
+      chartModels,
+      causeModelChartData,
+      pivotModels: modelList,
+      pivotRows: [...causePivotRows, totalRow],
+    };
+  }, [data, lang, rootCausePeriodOptions, selectedRootCausePeriod]);
 
   const dynamicPerformanceData = useMemo(() => {
     const creators: Record<string, { task: number, speed: number }> = {};
@@ -2154,34 +2347,175 @@ export default function App() {
 
         {activeTab === 'rootCause' && (
           <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900">{t('rootCauseModuleTitle')}</h3>
-              <p className="text-xs text-slate-500 mt-1">{t('rootCauseModuleHint')}</p>
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <div className="apple-card p-6">
-                <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('rootCauseModuleIntroTitle')}</h4>
-                <p className="text-sm leading-6 text-slate-500">{t('rootCauseModuleIntroDesc')}</p>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">{t('rootCauseModuleTitle')}</h3>
+                <p className="text-xs text-slate-500 mt-1">{t('rootCauseModuleHint')}</p>
               </div>
 
-              <div className="apple-card p-6">
-                <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('rootCauseModuleDataTitle')}</h4>
-                <p className="text-sm leading-6 text-slate-500">{t('rootCauseModuleDataDesc')}</p>
+              <div className="w-full max-w-xs">
+                <label className="block text-[10px] text-slate-500 mb-1 ml-1">{t('rootCausePeriodLabel')}</label>
+                <div className="relative">
+                  <select
+                    value={selectedRootCausePeriod}
+                    onChange={(e) => setSelectedRootCausePeriod(e.target.value)}
+                    disabled={!rootCausePeriodOptions.length}
+                    className={cn(
+                      "w-full appearance-none bg-slate-50 border border-slate-200 rounded-md text-xs h-9 pl-3 pr-8 focus:outline-none focus:ring-1 focus:ring-primary/20",
+                      !rootCausePeriodOptions.length && "opacity-60 cursor-not-allowed"
+                    )}
+                  >
+                    {rootCausePeriodOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
               </div>
             </div>
 
-            <div className="apple-card p-6">
-              <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('rootCauseModuleBoardsTitle')}</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[t('rootCauseBoard1'), t('rootCauseBoard2'), t('rootCauseBoard3'), t('rootCauseBoard4')].map((item, index) => (
-                  <div key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                    <div className="text-[10px] font-bold tracking-[0.2em] text-slate-400">BOARD {index + 1}</div>
-                    <div className="mt-2 text-sm font-medium text-slate-700">{item}</div>
+            {rootCauseDashboard.hasData ? (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="apple-card p-6">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('rootCauseBoard1')}</h4>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={rootCauseDashboard.trendData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <Tooltip />
+                        <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                        {rootCauseDashboard.trendCauses.map((cause, idx) => (
+                          <Line
+                            key={cause}
+                            type="monotone"
+                            dataKey={(entry: any) => entry[cause]}
+                            stroke={rootCauseDashboard.colorPalette[idx % rootCauseDashboard.colorPalette.length]}
+                            strokeWidth={2}
+                            dot={false}
+                            name={cause}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
-                ))}
+                </div>
+
+                <div className="apple-card p-6">
+                  <div className="flex items-center justify-between gap-4 mb-4">
+                    <h4 className="text-sm font-semibold text-slate-900">{t('rootCauseBoard2')}</h4>
+                    <span className="text-[11px] text-slate-400">{rootCauseDashboard.selectedPeriodLabel || '-'}</span>
+                  </div>
+                  <div className="h-80 w-full">
+                    {rootCauseDashboard.monthlyDistribution.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={rootCauseDashboard.monthlyDistribution}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} angle={-18} textAnchor="end" height={70} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(v) => `${Number(v).toFixed(0)}%`} domain={[0, 100]} />
+                          <Tooltip formatter={(v: any) => `${Number(v).toFixed(2)}%`} />
+                          <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                          <Bar dataKey="share" fill="#2563eb" name={t('ratio')}>
+                            <LabelList dataKey="share" position="top" formatter={(value: any) => `${Number(value).toFixed(1)}%`} className="fill-slate-500 text-[10px]" />
+                          </Bar>
+                          <Line type="monotone" dataKey="cumulativeShare" stroke="#f97316" strokeWidth={2.5} dot={{ r: 3 }} name={t('rootCauseCumulativeLabel')}>
+                            <LabelList dataKey="cumulativeShare" position="top" formatter={(value: any) => `${Number(value).toFixed(1)}%`} className="fill-slate-500 text-[10px]" />
+                          </Line>
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
+                        {t('rootCauseModuleEmpty')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="apple-card p-6">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('rootCauseBoard3')}</h4>
+                  <div className="h-80 w-full">
+                    {rootCauseDashboard.blankAnalysisDistribution.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={rootCauseDashboard.blankAnalysisDistribution} layout="vertical" margin={{ left: 16, right: 24 }}>
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                          <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                          <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} width={110} />
+                          <Tooltip />
+                          <Bar dataKey="count" fill="#0ea5e9" radius={[0, 6, 6, 0]} name={t('count')}>
+                            <LabelList dataKey="count" position="right" className="fill-slate-500 text-[10px]" />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
+                        {t('rootCauseBlankLabel')} {t('count')} = 0
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="apple-card p-6">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('rootCauseBoard4')}</h4>
+                  <div className="h-80 w-full">
+                    {rootCauseDashboard.chartModels.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={rootCauseDashboard.causeModelChartData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="cause" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} angle={-12} textAnchor="end" height={56} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                          <Tooltip />
+                          <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                          {rootCauseDashboard.chartModels.map((model, idx) => (
+                            <Bar
+                              key={model}
+                              dataKey={(entry: any) => entry[model]}
+                              fill={rootCauseDashboard.colorPalette[idx % rootCauseDashboard.colorPalette.length]}
+                              radius={[4, 4, 0, 0]}
+                              name={model}
+                            />
+                          ))}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
+                        {t('rootCauseModuleEmpty')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="apple-card p-6 xl:col-span-2">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('rootCauseTableTitle')}</h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[960px] text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-[10px] tracking-wider text-slate-500 font-bold whitespace-nowrap">
+                          <th className="px-4 py-3 border-b border-slate-100">{t('rootCause')}</th>
+                          {rootCauseDashboard.pivotModels.map((model) => (
+                            <th key={model} className="px-4 py-3 border-b border-slate-100 text-right">{model}</th>
+                          ))}
+                          <th className="px-4 py-3 border-b border-slate-100 text-right">{rootCauseDashboard.totalLabel}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-xs text-slate-600">
+                        {rootCauseDashboard.pivotRows.map((row) => (
+                          <tr key={row.cause} className={row.cause === rootCauseDashboard.totalLabel ? 'bg-slate-50 font-semibold text-slate-900' : 'hover:bg-slate-50 transition-colors'}>
+                            <td className="px-4 py-3 border-b border-slate-50 whitespace-nowrap">{row.cause}</td>
+                            {rootCauseDashboard.pivotModels.map((model) => (
+                              <td key={`${row.cause}-${model}`} className="px-4 py-3 border-b border-slate-50 text-right whitespace-nowrap">{row[model] || 0}</td>
+                            ))}
+                            <td className="px-4 py-3 border-b border-slate-50 text-right whitespace-nowrap">{row[rootCauseDashboard.totalLabel] || 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="apple-card p-6 text-sm text-slate-400">{t('rootCauseModuleEmpty')}</div>
+            )}
           </div>
         )}
 
