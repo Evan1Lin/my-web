@@ -99,8 +99,8 @@ const SidebarItem = ({ icon: Icon, label, active = false, onClick }: { icon: any
   <button 
     onClick={onClick}
     className={cn(
-      "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200",
-      active ? "sidebar-item-active text-slate-900" : "text-slate-500 hover:bg-slate-100"
+      "seed-nav-item w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200",
+      active ? "sidebar-item-active text-slate-900" : "text-slate-500"
     )}
   >
     <Icon size={20} />
@@ -109,17 +109,17 @@ const SidebarItem = ({ icon: Icon, label, active = false, onClick }: { icon: any
 );
 
 const KPICard = ({ title, value, target, trend, trendValue, color = "slate" }: any) => (
-  <div className="apple-card p-4 flex flex-col justify-between min-h-[140px]">
+  <div className="apple-card seed-kpi-card p-5 flex flex-col justify-between min-h-[152px]">
     <div className="flex justify-between items-start">
-      <p className="text-xs font-medium text-slate-500">{title}</p>
-      {target && <span className="text-[10px] text-slate-400">{target}</span>}
+      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">{title}</p>
+      {target && <span className="rounded-full bg-white/70 px-2.5 py-1 text-[10px] text-slate-400">{target}</span>}
     </div>
-    <h2 className={cn("text-3xl font-bold tracking-tight mt-2", color === "rose" ? "text-rose-600" : "text-slate-900")}>
+    <h2 className={cn("mt-4 text-4xl font-semibold tracking-[-0.05em]", color === "rose" ? "text-rose-600" : "text-slate-900")}>
       {value}
     </h2>
-    <div className="mt-2">
+    <div className="mt-4">
       {trend && (
-        <p className="text-[10px] flex items-center gap-1 text-slate-500">
+        <p className="inline-flex items-center gap-1.5 rounded-full bg-white/68 px-2.5 py-1 text-[10px] text-slate-500">
           {trend === "up" ? <ArrowUp size={12} className="text-emerald-600" /> : <ArrowDown size={12} className="text-rose-600" />}
           {trendValue}
         </p>
@@ -1867,12 +1867,15 @@ export default function App() {
 
   return (
     <>
-      <div className="flex bg-slate-50 min-h-screen text-slate-600 font-sans selection:bg-primary/10">
+      <div className="seed-shell min-h-screen font-sans text-slate-600 selection:bg-primary/15 selection:text-slate-900">
+      <div className="seed-backdrop-wave" />
+      <div className="seed-backdrop-grid" />
+      <div className="relative z-10 flex min-h-screen w-full flex-col lg:flex-row">
       {/* Notifications */}
       {importStatus.show && (
         <div className={cn(
-          "fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full shadow-lg border animate-in fade-in slide-in-from-top-4 duration-300",
-          importStatus.type === 'success' ? "bg-emerald-50 border-emerald-100 text-emerald-700" : "bg-rose-50 border-rose-100 text-rose-700"
+          "fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full shadow-lg border animate-in fade-in slide-in-from-top-4 duration-300 backdrop-blur-xl",
+          importStatus.type === 'success' ? "bg-emerald-50/85 border-emerald-100 text-emerald-700" : "bg-rose-50/85 border-rose-100 text-rose-700"
         )}>
           {importStatus.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
           <span className="text-xs font-semibold">{importStatus.message}</span>
@@ -1883,16 +1886,19 @@ export default function App() {
       )}
 
       {/* Sidebar */}
-      <aside className="w-64 border-r border-slate-200 bg-white/50 backdrop-blur-xl flex flex-col">
-        <div className="p-8">
-          <div className="flex items-center gap-3">
-            <div className="size-8 bg-primary rounded-lg flex items-center justify-center text-white">
-              <BarChart3 size={20} />
+      <aside className="seed-sidebar w-full lg:w-72 lg:min-w-72 flex flex-col">
+        <div className="px-8 pb-6 pt-8">
+          <div className="flex items-center gap-4">
+            <div className="seed-brand-chip size-11 rounded-2xl flex items-center justify-center text-white">
+              <BarChart3 size={22} />
             </div>
-            <span className="text-xl font-semibold tracking-tight">{t('brand')}</span>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">ByteDance Seed Style</p>
+              <span className="text-[26px] font-semibold tracking-[-0.05em] text-slate-950">{t('brand')}</span>
+            </div>
           </div>
         </div>
-        <nav className="flex-1 px-4 space-y-1">
+        <nav className="flex-1 px-4 space-y-2">
           <SidebarItem icon={LayoutDashboard} label={t('overview')} active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
           <SidebarItem icon={Factory} label={t('repairDashboard')} active={activeTab === 'repair'} onClick={() => setActiveTab('repair')} />
           <SidebarItem icon={BellRing} label={t('oobDashboard')} active={activeTab === 'oob'} onClick={() => setActiveTab('oob')} />
@@ -1901,22 +1907,22 @@ export default function App() {
           <SidebarItem icon={Settings} label={t('data')} active={activeTab === 'data'} onClick={() => setActiveTab('data')} />
         </nav>
         
-        <div className="p-4 border-t border-slate-100 flex flex-col gap-3">
-          <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg">
+        <div className="p-4 border-t border-white/50 flex flex-col gap-3">
+          <div className="seed-status-card flex items-center gap-2 px-4 py-3 rounded-2xl">
             <div className={cn(
               "size-2 rounded-full",
-              backendStatus === 'online' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : 
-              backendStatus === 'checking' ? "bg-amber-400 animate-pulse" : "bg-rose-500"
+              backendStatus === 'online' ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.45)]" : 
+              backendStatus === 'checking' ? "bg-sky-400 animate-pulse" : "bg-rose-500"
             )} />
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.22em]">
               Backend: {backendStatus}
             </span>
           </div>
           
-          <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 mt-2">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('accountLabel')}</p>
-            <p className="mt-2 text-sm font-semibold text-slate-900 break-all">{username || 'User'}</p>
-            <button onClick={handleLogout} className="w-full mt-3 flex justify-center items-center gap-2 py-1.5 rounded-md text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all">
+          <div className="seed-account-card rounded-[1.5rem] p-4">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.22em]">{t('accountLabel')}</p>
+            <p className="mt-2 text-base font-semibold tracking-[-0.03em] text-slate-950 break-all">{username || 'User'}</p>
+            <button onClick={handleLogout} className="seed-toolbar-button seed-toolbar-ghost mt-4 w-full text-slate-600 hover:text-rose-600">
               <LogOut size={14} /> 退出登录
             </button>
           </div>
@@ -1924,11 +1930,12 @@ export default function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-8 lg:p-12">
+      <main className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12">
         {/* Header */}
-        <header className="flex justify-between items-end mb-10">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+        <header className="mb-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Seed-inspired quality cockpit</p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.06em] text-slate-950 md:text-[42px]">
               {activeTab === 'overview' && t('title')}
               {activeTab === 'repair' && t('repairDashboard')}
               {activeTab === 'oob' && t('oobDashboard')}
@@ -1936,13 +1943,13 @@ export default function App() {
               {activeTab === 'rootCause' && t('rootCauseDashboard')}
               {activeTab === 'data' && t('data')}
             </h1>
-            <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-medium">{t('subtitle')}</p>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">{t('subtitle')}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {activeTab !== 'repair' && (
               <>
                 <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
-                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-primary rounded-md text-xs font-medium text-white hover:bg-primary/90 transition-colors shadow-sm">
+                <button onClick={() => fileInputRef.current?.click()} className="seed-toolbar-button seed-toolbar-primary">
                   <FileSpreadsheet size={14} /> {t('importExcel')}
                 </button>
               </>
@@ -1950,23 +1957,22 @@ export default function App() {
             {activeTab === 'repair' && (
               <>
                 <input type="file" ref={repairFileInputRef} onChange={handleImportRepairExcel} accept=".xlsx, .xls" className="hidden" />
-                <button onClick={() => repairFileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-primary rounded-md text-xs font-medium text-white hover:bg-primary/90 transition-colors shadow-sm">
+                <button onClick={() => repairFileInputRef.current?.click()} className="seed-toolbar-button seed-toolbar-primary">
                   <FileSpreadsheet size={14} /> {t('importRepairExcel')}
                 </button>
               </>
             )}
-            <button onClick={handleReset} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 rounded-md text-xs font-medium text-white hover:bg-amber-600 transition-colors shadow-sm">
+            <button onClick={handleReset} className="seed-toolbar-button seed-toolbar-accent">
               <RefreshCw size={14} /> {activeTab === 'repair' ? t('clearRepairData') : t('resetData')}
             </button>
             {activeTab !== 'repair' && (
-              <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-md border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-200 transition-colors">
+              <button onClick={handleExport} className="seed-toolbar-button seed-toolbar-ghost">
                 <Download size={14} /> {t('exportReport')}
               </button>
             )}
-            <div className="flex items-center ml-4 bg-white border border-slate-200 rounded-md p-0.5 text-[10px] font-medium shadow-sm overflow-hidden">
-              <button onClick={() => setLang('EN')} className={cn("px-2 py-1 transition-colors", lang === 'EN' ? "bg-slate-100 text-primary" : "text-slate-400")}>EN</button>
-              <span className="text-slate-200">|</span>
-              <button onClick={() => setLang('中')} className={cn("px-2 py-1 transition-colors", lang === '中' ? "bg-slate-100 text-primary" : "text-slate-400")}>中</button>
+            <div className="seed-lang-toggle ml-0 flex items-center p-1 text-[10px] font-medium shadow-sm overflow-hidden lg:ml-4">
+              <button onClick={() => setLang('EN')} className={cn("seed-lang-option px-3 py-1.5 transition-colors", lang === 'EN' ? "seed-lang-option-active" : "text-slate-400")}>EN</button>
+              <button onClick={() => setLang('中')} className={cn("seed-lang-option px-3 py-1.5 transition-colors", lang === '中' ? "seed-lang-option-active" : "text-slate-400")}>中</button>
             </div>
           </div>
         </header>
@@ -1981,7 +1987,7 @@ export default function App() {
               <KPICard title={t('overdue')} value={kpiStats.overdue.val} trend={kpiStats.overdue.trend.direction} trendValue={`${t('vsLastMonth')} ${kpiStats.overdue.trend.value}`} color="rose" />
             </div>
 
-            <div className="apple-card p-4 mb-6">
+            <div className="apple-card seed-filter-panel p-5 mb-6">
               <div className="flex items-center gap-2 mb-3 text-primary text-xs font-semibold"><Search size={14} /> {t('filter')}</div>
               <div className="grid grid-cols-6 gap-4">
                 <div>
@@ -2631,7 +2637,7 @@ export default function App() {
               <div className="flex gap-2">
                 <div className="relative">
                   <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input type="text" placeholder={t('searchPlaceholder')} className="pl-8 pr-4 py-1.5 bg-white border border-slate-200 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-primary/20 w-64" />
+                  <input type="text" placeholder={t('searchPlaceholder')} className="seed-input w-64 rounded-full py-2 pl-8 pr-4 text-xs focus:outline-none" />
                 </div>
               </div>
             </div>
@@ -2721,6 +2727,7 @@ export default function App() {
           </div>
         )}
       </main>
+    </div>
     </div>
 
       {isKickedOut && (
