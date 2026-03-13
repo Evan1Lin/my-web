@@ -738,7 +738,7 @@ export default function App() {
         bucket.all.warrantyQty += warrantyQty;
         bucket.all.explicitRate += explicitRate;
         bucket.all.hasExplicit = true;
-        return;
+        continue;
       }
 
       bucket[productLine].repairQty += repairQty;
@@ -1133,6 +1133,22 @@ export default function App() {
           }
           return 0;
         };
+        const parseRateNumber = (...values: any[]) => {
+          for (const value of values) {
+            if (value === undefined || value === null || value === '') continue;
+            if (typeof value === 'number' && Number.isFinite(value)) {
+              return value > 0 && value <= 1 ? value * 100 : value;
+            }
+            const text = String(value).trim();
+            if (!text) continue;
+            const normalized = text.replace(/[%\s,]/g, '');
+            const parsed = Number(normalized);
+            if (!Number.isNaN(parsed)) {
+              return text.includes('%') ? parsed : (parsed > 0 && parsed <= 1 ? parsed * 100 : parsed);
+            }
+          }
+          return 0;
+        };
         const buildNormalizedRow = (row: Record<string, any>) => {
           const normalized: Record<string, any> = {};
           Object.entries(row).forEach(([key, value]) => {
@@ -1228,9 +1244,9 @@ export default function App() {
             const monthShipmentCount = parseNumber(getValueByAliases(row, ['月度发货数']));
             const warrantyShipmentCount = parseNumber(getValueByAliases(row, ['截止当月保内发货总数', '保内发货总数']));
             const oobDefectCount = parseNumber(getValueByAliases(row, ['月度OOB开箱不合格产品数', 'OOB开箱不合格产品数']));
-            const monthlyRepairRate = parseNumber(getValueByAliases(row, ['月度返修率']));
-            const monthlyOobRate = parseNumber(getValueByAliases(row, ['月度OOB开箱不合格率', '月度OOB开箱不合格率']));
-            const totalRepairRate = parseNumber(getValueByAliases(row, ['总返修率'])) || (monthlyRepairRate * 0.4 + monthlyOobRate * 0.6);
+            const monthlyRepairRate = parseRateNumber(getValueByAliases(row, ['月度返修率']));
+            const monthlyOobRate = parseRateNumber(getValueByAliases(row, ['月度OOB开箱不合格率', '月度OOB开箱不合格率']));
+            const totalRepairRate = parseRateNumber(getValueByAliases(row, ['总返修率'])) || (monthlyRepairRate * 0.4 + monthlyOobRate * 0.6);
             const productLine = normalizeProductLine(getValueByAliases(row, ['产品分类', '产品线', '分类']));
 
             return {
@@ -1247,6 +1263,10 @@ export default function App() {
             };
           })
           .filter(row => row.year > 0 && row.month > 0);
+
+        if (processedData.length === 0) {
+          throw new Error('repair-data-empty');
+        }
 
         setRepairData(processedData);
 
