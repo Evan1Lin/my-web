@@ -125,6 +125,7 @@ const TRANSLATIONS: Record<string, any> = {
     production: '生产看板',
     repairDashboard: '返修率看板',
     oobDashboard: 'OOB看板',
+    closeDashboard: '问题关闭率看板',
     performance: '绩效看板',
     data: '详细数据',
     importExcel: '导入表格',
@@ -150,6 +151,14 @@ const TRANSLATIONS: Record<string, any> = {
     mainDeptOobTitle: '主责部门看板 OOB 产品趋势',
     initialDeptOobTitle: '初筛主责部门看板 OOB 产品趋势',
     oobDashboardEmpty: '请先导入包含 OOB 信息的总表数据',
+    closeModuleTitle: '问题关闭率看板',
+    closeModuleHint: '基于总表中的问题数量、问题关闭数量、产品分类、主责部门与初筛主责部门统计关闭率趋势。',
+    overallCloseRateTitle: '市场问题关闭率趋势',
+    productCloseRateTitle: '按产品分类统计市场问题关闭率趋势',
+    productOobCloseRateTitle: '按产品分类统计市场 OOB 问题关闭率趋势',
+    mainDeptCloseRateTitle: '主责部门问题关闭率趋势',
+    initialDeptCloseRateTitle: '初筛主责部门问题关闭率趋势',
+    closeDashboardEmpty: '请先导入包含问题数量和问题关闭数量的总表数据',
     closeRate: '问题关闭率',
     overdue: '逾期未闭环',
     target: '目标',
@@ -242,6 +251,7 @@ const TRANSLATIONS: Record<string, any> = {
     production: 'Production Dashboard',
     repairDashboard: 'Repair Rate Dashboard',
     oobDashboard: 'OOB Dashboard',
+    closeDashboard: 'Issue Close Rate Dashboard',
     performance: 'Performance Dashboard',
     data: 'Detailed Data',
     importExcel: 'Import Excel',
@@ -267,6 +277,14 @@ const TRANSLATIONS: Record<string, any> = {
     mainDeptOobTitle: 'Main Department OOB Trend',
     initialDeptOobTitle: 'Initial Department OOB Trend',
     oobDashboardEmpty: 'Import issue data with OOB fields first',
+    closeModuleTitle: 'Issue Close Rate Dashboard',
+    closeModuleHint: 'Close-rate trends calculated from issue quantity, closed quantity, product line, main department, and initial department in the main workbook.',
+    overallCloseRateTitle: 'Market Issue Close Rate Trend',
+    productCloseRateTitle: 'Market Issue Close Rate Trend by Product Line',
+    productOobCloseRateTitle: 'Market OOB Issue Close Rate Trend by Product Line',
+    mainDeptCloseRateTitle: 'Main Department Issue Close Rate Trend',
+    initialDeptCloseRateTitle: 'Initial Department Issue Close Rate Trend',
+    closeDashboardEmpty: 'Import issue data with issue quantity and closed quantity first',
     closeRate: 'Issue Close Rate',
     overdue: 'Overdue Unclosed',
     target: 'Target',
@@ -905,6 +923,183 @@ export default function App() {
     };
   }, [data, lang]);
 
+  const closeRateDashboard = useMemo(() => {
+    const normalizeProductLine = (value: any) => {
+      const v = String(value || '').trim();
+      if (!v) return 'others';
+      if (v === 'roboticArm' || v.includes('机械臂')) return 'roboticArm';
+      if (v === 'robot' || v.includes('机器人')) return 'robot';
+      if (v === 'joint' || v.includes('关节')) return 'joint';
+      if (v === 'others' || v.includes('其他')) return 'others';
+      return 'others';
+    };
+    const monthLabel = (year: number, month: number) => lang === '中'
+      ? `${year}年${month}月`
+      : `${year}-${String(month).padStart(2, '0')}`;
+    const sortedPeriods = Array.from(
+      new Set(
+        data
+          .map((row: any) => {
+            const year = Number(row.year) || 0;
+            const month = Number(row.month) || 0;
+            if (year <= 0 || month < 1 || month > 12) return '';
+            return `${year}-${String(month).padStart(2, '0')}`;
+          })
+          .filter(Boolean)
+      )
+    ) as string[];
+    sortedPeriods.sort();
+
+    const ensureOverallRow = (map: Map<string, any>, periodKey: string, label: string) => {
+      if (!map.has(periodKey)) {
+        map.set(periodKey, { month: label, total: 0, closed: 0 });
+      }
+      return map.get(periodKey);
+    };
+    const ensureProductRow = (map: Map<string, any>, periodKey: string, label: string) => {
+      if (!map.has(periodKey)) {
+        map.set(periodKey, {
+          month: label,
+          roboticArmTotal: 0,
+          roboticArmClosed: 0,
+          robotTotal: 0,
+          robotClosed: 0,
+          jointTotal: 0,
+          jointClosed: 0,
+          othersTotal: 0,
+          othersClosed: 0,
+        });
+      }
+      return map.get(periodKey);
+    };
+    const toClosedQuantity = (row: any) => {
+      const issueQty = Math.max(0, Number(row.issueQuantity) || 0);
+      const closedQty = Number((row as any).closedQuantity);
+      const normalizedClosedQty = Number.isFinite(closedQty) ? closedQty : (row.closed ? issueQty : 0);
+      return Math.max(0, Math.min(issueQty, normalizedClosedQty));
+    };
+    const calcRate = (closedQty: number, totalQty: number) => totalQty > 0 ? (closedQty / totalQty) * 100 : 0;
+
+    const overallMap = new Map<string, any>();
+    const productMap = new Map<string, any>();
+    const oobProductMap = new Map<string, any>();
+    const mainDeptTotals: Record<string, number> = {};
+    const initialDeptTotals: Record<string, number> = {};
+
+    data.forEach((row: any) => {
+      const year = Number(row.year) || 0;
+      const month = Number(row.month) || 0;
+      if (year <= 0 || month < 1 || month > 12) return;
+
+      const periodKey = `${year}-${String(month).padStart(2, '0')}`;
+      const periodLabel = monthLabel(year, month);
+      const issueQty = Math.max(0, Number(row.issueQuantity) || 0);
+      const closedQty = toClosedQuantity(row);
+      const productLine = normalizeProductLine(row.productLine);
+      const mainDept = String(row.mainDept || row.dept || '').trim() || '未指定';
+      const initialDept = String(row.initialDept || '').trim() || '未指定';
+
+      const overallRow = ensureOverallRow(overallMap, periodKey, periodLabel);
+      overallRow.total += issueQty;
+      overallRow.closed += closedQty;
+
+      const productRow = ensureProductRow(productMap, periodKey, periodLabel);
+      productRow[`${productLine}Total`] += issueQty;
+      productRow[`${productLine}Closed`] += closedQty;
+
+      if (Number(row.oob) >= 1) {
+        const oobProductRow = ensureProductRow(oobProductMap, periodKey, periodLabel);
+        oobProductRow[`${productLine}Total`] += issueQty;
+        oobProductRow[`${productLine}Closed`] += closedQty;
+      }
+
+      mainDeptTotals[mainDept] = (mainDeptTotals[mainDept] || 0) + issueQty;
+      initialDeptTotals[initialDept] = (initialDeptTotals[initialDept] || 0) + issueQty;
+    });
+
+    const buildProductRateTrend = (map: Map<string, any>) => {
+      return sortedPeriods.map((periodKey) => {
+        const [year, month] = periodKey.split('-').map(Number);
+        const row = map.get(periodKey) || ensureProductRow(map, periodKey, monthLabel(year, month));
+        return {
+          month: row.month,
+          roboticArm: calcRate(row.roboticArmClosed, row.roboticArmTotal),
+          robot: calcRate(row.robotClosed, row.robotTotal),
+          joint: calcRate(row.jointClosed, row.jointTotal),
+          others: calcRate(row.othersClosed, row.othersTotal),
+        };
+      });
+    };
+
+    const buildDepartmentCloseTrend = (totals: Record<string, number>, field: 'mainDept' | 'initialDept') => {
+      const topDepartments = Object.entries(totals)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([name]) => name);
+
+      const rows = sortedPeriods.map((periodKey) => {
+        const [year, month] = periodKey.split('-').map(Number);
+        const row: Record<string, any> = { month: monthLabel(year, month) };
+        const stats: Record<string, { total: number; closed: number }> = {};
+
+        topDepartments.forEach((dept) => {
+          stats[dept] = { total: 0, closed: 0 };
+          row[dept] = 0;
+        });
+
+        data.forEach((item: any) => {
+          const itemYear = Number(item.year) || 0;
+          const itemMonth = Number(item.month) || 0;
+          const itemPeriodKey = `${itemYear}-${String(itemMonth).padStart(2, '0')}`;
+          if (itemPeriodKey !== periodKey) return;
+
+          const deptName = String(
+            field === 'mainDept'
+              ? (item.mainDept || item.dept || '')
+              : (item.initialDept || '')
+          ).trim() || '未指定';
+
+          if (!topDepartments.includes(deptName)) return;
+
+          stats[deptName].total += Math.max(0, Number(item.issueQuantity) || 0);
+          stats[deptName].closed += toClosedQuantity(item);
+        });
+
+        topDepartments.forEach((dept) => {
+          row[dept] = calcRate(stats[dept].closed, stats[dept].total);
+        });
+
+        return row;
+      });
+
+      return {
+        rows,
+        departments: topDepartments,
+      };
+    };
+
+    const mainDeptClose = buildDepartmentCloseTrend(mainDeptTotals, 'mainDept');
+    const initialDeptClose = buildDepartmentCloseTrend(initialDeptTotals, 'initialDept');
+
+    return {
+      hasData: sortedPeriods.length > 0,
+      overallTrend: sortedPeriods.map((periodKey) => {
+        const [year, month] = periodKey.split('-').map(Number);
+        const row = overallMap.get(periodKey) || ensureOverallRow(overallMap, periodKey, monthLabel(year, month));
+        return {
+          month: row.month,
+          closeRate: calcRate(row.closed, row.total),
+        };
+      }),
+      productTrend: buildProductRateTrend(productMap),
+      oobProductTrend: buildProductRateTrend(oobProductMap),
+      mainDeptTrend: mainDeptClose.rows,
+      initialDeptTrend: initialDeptClose.rows,
+      mainDepartments: mainDeptClose.departments,
+      initialDepartments: initialDeptClose.departments,
+    };
+  }, [data, lang]);
+
   const dynamicPerformanceData = useMemo(() => {
     const creators: Record<string, { task: number, speed: number }> = {};
     filteredData.forEach(d => {
@@ -1428,6 +1623,7 @@ export default function App() {
           <SidebarItem icon={TrendingUp} label={t('trend')} active={activeTab === 'trend'} onClick={() => setActiveTab('trend')} />
           <SidebarItem icon={Factory} label={t('repairDashboard')} active={activeTab === 'repair'} onClick={() => setActiveTab('repair')} />
           <SidebarItem icon={BellRing} label={t('oobDashboard')} active={activeTab === 'oob'} onClick={() => setActiveTab('oob')} />
+          <SidebarItem icon={CheckCircle2} label={t('closeDashboard')} active={activeTab === 'close'} onClick={() => setActiveTab('close')} />
           <SidebarItem icon={Settings} label={t('data')} active={activeTab === 'data'} onClick={() => setActiveTab('data')} />
         </nav>
         
@@ -1472,6 +1668,7 @@ export default function App() {
               {activeTab === 'trend' && t('trend')}
               {activeTab === 'repair' && t('repairDashboard')}
               {activeTab === 'oob' && t('oobDashboard')}
+              {activeTab === 'close' && t('closeDashboard')}
               {activeTab === 'data' && t('data')}
             </h1>
             <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-medium">{t('subtitle')}</p>
@@ -1883,6 +2080,110 @@ export default function App() {
               </div>
             ) : (
               <div className="apple-card p-6 text-sm text-slate-400">{t('oobDashboardEmpty')}</div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'close' && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">{t('closeModuleTitle')}</h3>
+              <p className="text-xs text-slate-500 mt-1">{t('closeModuleHint')}</p>
+            </div>
+
+            {closeRateDashboard.hasData ? (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="apple-card p-6">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('overallCloseRateTitle')}</h4>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={closeRateDashboard.overallTrend}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(v) => `${Number(v).toFixed(0)}%`} />
+                        <Tooltip formatter={(v: any) => `${Number(v).toFixed(2)}%`} />
+                        <Line type="monotone" dataKey="closeRate" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 4 }} name={t('closeRate')} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="apple-card p-6">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('productCloseRateTitle')}</h4>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={closeRateDashboard.productTrend}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(v) => `${Number(v).toFixed(0)}%`} />
+                        <Tooltip formatter={(v: any) => `${Number(v).toFixed(2)}%`} />
+                        <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                        <Line type="monotone" dataKey="roboticArm" stroke="#2563eb" strokeWidth={2} dot={false} name={t('roboticArm')} />
+                        <Line type="monotone" dataKey="others" stroke="#f97316" strokeWidth={2} dot={false} name={t('others')} />
+                        <Line type="monotone" dataKey="robot" stroke="#94a3b8" strokeWidth={2} dot={false} name={t('robot')} />
+                        <Line type="monotone" dataKey="joint" stroke="#eab308" strokeWidth={2} dot={false} name={t('joint')} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="apple-card p-6">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('productOobCloseRateTitle')}</h4>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={closeRateDashboard.oobProductTrend}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(v) => `${Number(v).toFixed(0)}%`} />
+                        <Tooltip formatter={(v: any) => `${Number(v).toFixed(2)}%`} />
+                        <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                        <Line type="monotone" dataKey="roboticArm" stroke="#2563eb" strokeWidth={2} dot={false} name={t('roboticArm')} />
+                        <Line type="monotone" dataKey="others" stroke="#f97316" strokeWidth={2} dot={false} name={t('others')} />
+                        <Line type="monotone" dataKey="robot" stroke="#94a3b8" strokeWidth={2} dot={false} name={t('robot')} />
+                        <Line type="monotone" dataKey="joint" stroke="#eab308" strokeWidth={2} dot={false} name={t('joint')} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="apple-card p-6">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('mainDeptCloseRateTitle')}</h4>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={closeRateDashboard.mainDeptTrend}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(v) => `${Number(v).toFixed(0)}%`} />
+                        <Tooltip formatter={(v: any) => `${Number(v).toFixed(2)}%`} />
+                        <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                        {closeRateDashboard.mainDepartments.map((dept, idx) => (
+                          <Line key={dept} type="monotone" dataKey={dept} stroke={['#2563eb', '#f97316', '#94a3b8', '#eab308', '#0ea5e9', '#16a34a'][idx % 6]} strokeWidth={2} dot={false} name={dept} />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="apple-card p-6 xl:col-span-2">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4">{t('initialDeptCloseRateTitle')}</h4>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={closeRateDashboard.initialDeptTrend}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(v) => `${Number(v).toFixed(0)}%`} />
+                        <Tooltip formatter={(v: any) => `${Number(v).toFixed(2)}%`} />
+                        <Legend wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                        {closeRateDashboard.initialDepartments.map((dept, idx) => (
+                          <Line key={dept} type="monotone" dataKey={dept} stroke={['#2563eb', '#f97316', '#94a3b8', '#eab308', '#0ea5e9', '#16a34a'][idx % 6]} strokeWidth={2} dot={false} name={dept} />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="apple-card p-6 text-sm text-slate-400">{t('closeDashboardEmpty')}</div>
             )}
           </div>
         )}
